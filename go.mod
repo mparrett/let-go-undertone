@@ -1,4 +1,4 @@
-module sointu-homage
+module undertone
 
 go 1.26.3
 

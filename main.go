@@ -1,8 +1,8 @@
-// sointu-homage: a demo-sized generative-audio homage to vsariola/sointu
-// (the 4k-intro softsynth govertone embeds). Not a reimplementation — it
-// keeps the *shape*: instruments are stacks of unit opcodes run by a tiny
-// per-sample VM, a tracker-style sequencer drives them, and the whole track
-// is derived deterministically from a seed.
+// undertone: a tiny generative-ambience engine (the glplat audio spike's
+// engine seed). Architecturally a demo-sized homage to vsariola/sointu —
+// no sointu code, just its shape: instruments are stacks of unit opcodes
+// run by a tiny per-sample VM, a tracker-style sequencer drives them, and
+// the whole track is derived deterministically from a seed.
 //
 // Register: roguelike ambience. Parameters derive from (seed, depth) —
 // deeper is darker, slower, thicker — and SetParameters applies a new map
@@ -20,6 +20,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"sync/atomic"
 
 	"github.com/ebitengine/oto/v3"
 )
@@ -315,6 +316,53 @@ type Synth struct {
 	dl, dr        []float64 // delay lines
 	dpos          int
 	dbus          float64
+
+	// VU meter tap: read-only from the synthesis path's view — nothing
+	// here feeds back into the samples, so renders stay byte-identical.
+	mlp  [3]float64 // one-pole states at the band edges
+	menv [4]float64 // per-band peak envelopes (attack instant, slow decay)
+	mout [4]uint64  // envelopes published as float bits for cross-goroutine reads
+}
+
+// band-edge one-pole coefficients (120/350/1200 Hz) and ~400ms decay
+var mcoef = [3]float64{
+	1 - math.Exp(-2*math.Pi*120/sampleRate),
+	1 - math.Exp(-2*math.Pi*350/sampleRate),
+	1 - math.Exp(-2*math.Pi*1200/sampleRate),
+}
+
+const mdecay = 0.99974
+
+func (s *Synth) meter(l, r float64) {
+	mono := (l + r) / 2
+	for i, c := range mcoef {
+		s.mlp[i] += c * (mono - s.mlp[i])
+	}
+	bands := [4]float64{
+		s.mlp[0],            // sub
+		s.mlp[1] - s.mlp[0], // low-mid
+		s.mlp[2] - s.mlp[1], // mid
+		mono - s.mlp[2],     // high
+	}
+	for i, b := range bands {
+		if b < 0 {
+			b = -b
+		}
+		s.menv[i] *= mdecay
+		if b > s.menv[i] {
+			s.menv[i] = b
+		}
+		atomic.StoreUint64(&s.mout[i], math.Float64bits(s.menv[i]))
+	}
+}
+
+// Levels returns the current per-band envelopes (sub, low-mid, mid, high).
+func (s *Synth) Levels() [4]float64 {
+	var v [4]float64
+	for i := range v {
+		v[i] = math.Float64frombits(atomic.LoadUint64(&s.mout[i]))
+	}
+	return v
 }
 
 func NewSynth(p Params) *Synth {
@@ -383,6 +431,7 @@ func (s *Synth) frame() (int16, int16) {
 	l += wl * 0.5
 	r += wr * 0.5
 	l, r = math.Tanh(l*0.8), math.Tanh(r*0.8)
+	s.meter(l, r)
 	return int16(l * 32000), int16(r * 32000)
 }
 
@@ -454,8 +503,7 @@ func main() {
 		<-ready
 		pl := ctx.NewPlayer(io.Reader(s))
 		pl.Play()
-		fmt.Printf("playing %s — ctrl-c to stop\n", desc)
-		select {}
+		runMeterUI(s, desc)
 	default:
 		flag.Usage()
 	}

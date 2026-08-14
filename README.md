@@ -1,8 +1,9 @@
-# sointu-homage
+# undertone
 
-A demo-sized generative-audio homage to [vsariola/sointu](https://github.com/vsariola/sointu)
-(the 4k-intro softsynth govertone embeds). Homage, not reimplementation — one
-Go file that keeps sointu's *shape*:
+A tiny generative-ambience engine — under(ground) + tone — and the glplat
+audio spike's engine seed. Architecturally a demo-sized homage to
+[vsariola/sointu](https://github.com/vsariola/sointu), the 4k-intro softsynth
+govertone embeds: no sointu code here, just its shape, in one Go file:
 
 - **instruments are stacks of unit opcodes** run by a tiny per-sample VM
   (`opEnv`, `opOsc`, `opMul`, `opLpf`, `opSend`, `opOut`); patches are compact
