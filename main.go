@@ -4,8 +4,13 @@
 // per-sample VM, a tracker-style sequencer drives them, and the whole track
 // is derived deterministically from a seed.
 //
-//	go run . -play              # live, endless, via oto
-//	go run . -wav out.wav       # deterministic offline render
+// Register: roguelike ambience. Parameters derive from (seed, depth) —
+// deeper is darker, slower, thicker — and SetParameters applies a new map
+// at the next pattern boundary, the same transactional semantics the
+// glplat audio surface sketch proposes for audio/set-parameters.
+//
+//	go run . -play                       # live, endless, via oto
+//	go run . -wav out.wav -depth 4       # deterministic offline render
 package main
 
 import (
@@ -56,15 +61,17 @@ type ustate struct {
 type Voice struct {
 	patch    Patch
 	note     int
+	gain     float64
 	gate     bool
 	gateRows int
 	units    []ustate
 	active   bool
 }
 
-func (v *Voice) trigger(patch Patch, note, gateRows int, seed uint64) {
+func (v *Voice) trigger(patch Patch, note, gateRows int, gain float64, seed uint64) {
 	v.patch = patch
 	v.note = note
+	v.gain = gain
 	v.gate = true
 	v.gateRows = gateRows
 	v.active = true
@@ -139,47 +146,103 @@ func (v *Voice) run(l, r, delay *float64) {
 			s.lp += c * (stack[sp-1] - s.lp)
 			stack[sp-1] = s.lp
 		case opSend:
-			*delay += stack[sp-1] * u.p[0]
+			*delay += stack[sp-1] * u.p[0] * v.gain
 		case opOut:
 			sp--
-			*l += stack[sp] * u.p[0] * (1 - u.p[1])
-			*r += stack[sp] * u.p[0] * u.p[1]
+			*l += stack[sp] * u.p[0] * (1 - u.p[1]) * v.gain
+			*r += stack[sp] * u.p[0] * u.p[1] * v.gain
 		}
 	}
 	v.active = alive
 }
 
 // ---- instruments (compact opcode tables, sointu-patch style) ----
+// Two env→osc→out chains in one patch = two detuned layers; opOut
+// accumulates, so layering needs no add opcode.
 
-var kick = Patch{
-	{opEnv, [4]float64{0.001, 0.09, 0, 0.06}},
-	{opOsc, [4]float64{0, shpSine, 38, 0.04}}, // pitch-swept sine
+var drone = Patch{
+	{opEnv, [4]float64{2.5, 2, 1, 4}},
+	{opOsc, [4]float64{-0.06, shpSaw, 0, 1}},
 	{opMul, [4]float64{}},
-	{opOut, [4]float64{0.9, 0.5}},
+	{opLpf, [4]float64{280, 0, 0, 0}},
+	{opOut, [4]float64{0.5, 0.42}},
+	{opEnv, [4]float64{2.5, 2, 1, 4}},
+	{opOsc, [4]float64{0.06, shpSaw, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{280, 0, 0, 0}},
+	{opOut, [4]float64{0.5, 0.58}},
 }
 
-var bass = Patch{
-	{opEnv, [4]float64{0.004, 0.25, 0.4, 0.08}},
-	{opOsc, [4]float64{0, shpSaw, 0, 1}},
+var pad = Patch{
+	{opEnv, [4]float64{1.2, 1.5, 0.6, 1.8}},
+	{opOsc, [4]float64{-0.04, shpSine, 0, 1}},
 	{opMul, [4]float64{}},
-	{opLpf, [4]float64{700, 0, 0, 0}},
-	{opOut, [4]float64{0.55, 0.5}},
+	{opOut, [4]float64{0.5, 0.35}},
+	{opEnv, [4]float64{1.4, 1.5, 0.6, 1.8}},
+	{opOsc, [4]float64{0.04, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.5, 0.65}},
 }
 
-var lead = Patch{
-	{opEnv, [4]float64{0.01, 0.3, 0.25, 0.12}},
-	{opOsc, [4]float64{0, shpPulse, 0, 1}},
+var bell = Patch{
+	{opEnv, [4]float64{0.003, 1.4, 0, 0.5}},
+	{opOsc, [4]float64{0, shpSine, 0, 1}},
 	{opMul, [4]float64{}},
-	{opLpf, [4]float64{2200, 0, 0, 0}},
-	{opSend, [4]float64{0.5, 0, 0, 0}},
-	{opOut, [4]float64{0.28, 0.42}},
+	{opSend, [4]float64{0.7, 0, 0, 0}},
+	{opOut, [4]float64{0.5, 0.6}},
 }
 
-var hat = Patch{
-	{opEnv, [4]float64{0.001, 0.035, 0, 0.02}},
+var air = Patch{
+	{opEnv, [4]float64{2.5, 2.5, 0.4, 3.5}},
 	{opOsc, [4]float64{0, shpNoise, 0, 1}},
 	{opMul, [4]float64{}},
-	{opOut, [4]float64{0.18, 0.62}},
+	// two one-pole stages: a single pole leaks enough top end that the
+	// air track *brightened* with depth instead of darkening
+	{opLpf, [4]float64{300, 0, 0, 0}},
+	{opLpf, [4]float64{300, 0, 0, 0}},
+	{opOut, [4]float64{1.1, 0.5}},
+}
+
+// ---- parameters: the (seed, depth) -> music map ----
+// The kaiju-elements trick: taste lives in hand-tuned option tables,
+// the seed just picks. Depth darkens the pick.
+
+type Params struct {
+	BPM         float64
+	Root        int   // MIDI, chord anchor
+	Scale       []int // semitone intervals
+	DroneGain   float64
+	FifthGain   float64 // second drone at the fifth; thickens with depth
+	PadDensity  float64
+	BellDensity float64
+	AirGain     float64
+	Seed        uint64
+}
+
+var scalesByDarkness = [][]int{
+	{0, 2, 3, 5, 7, 9, 10}, // dorian
+	{0, 2, 3, 5, 7, 8, 10}, // aeolian
+	{0, 1, 3, 5, 7, 8, 10}, // phrygian
+}
+
+func DeriveParams(seed uint64, depth int) Params {
+	r := rng{seed ^ uint64(depth)*0x9e3779b97f4a7c15 | 1}
+	d := float64(depth)
+	darkness := depth / 2
+	if darkness >= len(scalesByDarkness) {
+		darkness = len(scalesByDarkness) - 1
+	}
+	return Params{
+		BPM:         math.Max(46, 66-3*d) + float64(r.n(5)),
+		Root:        57 - depth + []int{-2, 0, 0, 3}[r.n(4)],
+		Scale:       scalesByDarkness[darkness],
+		DroneGain:   math.Min(0.9, 0.55+0.06*d),
+		FifthGain:   math.Min(0.7, 0.2*d),
+		PadDensity:  0.6 - 0.05*d,
+		BellDensity: math.Max(0.04, 0.16-0.02*d),
+		AirGain:     math.Min(0.6, 0.25+0.05*d),
+		Seed:        seed,
+	}
 }
 
 // ---- generative sequencer ----
@@ -196,109 +259,95 @@ func (r *rng) f() float64  { return float64(r.next()>>11) / (1 << 53) }
 func (r *rng) n(m int) int { return int(r.next() % uint64(m)) }
 
 const rows = 16
+const nTracks = 5 // drone, fifth, pad, bell, air
 
-// A-minor pentatonic; chord roots A F C G — enough harmony to sound
-// intentional, few enough rules to stay demo-sized.
-var penta = []int{0, 3, 5, 7, 10}
-var roots = []int{57, 53, 60, 55}
-
-type trackCfg struct {
-	patch    Patch
+type trackRow struct {
+	note     int
+	gain     float64
 	gateRows int
-	gen      func(r *rng, pat int) [rows]int
+	patch    Patch
 }
 
-var tracks = []trackCfg{
-	{kick, 1, func(r *rng, pat int) (p [rows]int) {
-		p[0], p[8] = 33, 33
-		if r.f() < 0.3 {
-			p[10+2*r.n(3)] = 33
+// buildPatterns fills one pattern (16 rows x nTracks) from Params.
+// Chord drifts between tonic, VI, and iv each pattern; bells walk the
+// scale — per-pattern reseeding is the gradual-mutation mechanism.
+func buildPatterns(p Params, pat int) [nTracks][rows]trackRow {
+	var out [nTracks][rows]trackRow
+	r := rng{p.Seed ^ uint64(pat)*0x9e3779b97f4a7c15 | 1}
+	chord := p.Root + []int{0, 0, p.Scale[5] - 12, p.Scale[3] - 12}[r.n(4)]
+
+	out[0][0] = trackRow{chord - 12, p.DroneGain, rows, drone}
+	if p.FifthGain > 0.01 {
+		// pad patch (sine pair), not the saw drone: the fifth should
+		// thicken with depth, not brighten
+		out[1][0] = trackRow{chord - 5, p.FifthGain, rows, pad}
+	}
+	for _, row := range []int{0, 8} {
+		if r.f() < p.PadDensity {
+			deg := []int{0, 2, 4}[r.n(3)]
+			out[2][row] = trackRow{chord + p.Scale[deg], 0.7, 6, pad}
 		}
-		return
-	}},
-	{bass, 2, func(r *rng, pat int) (p [rows]int) {
-		root := roots[pat%4] - 24
-		for i := 0; i < rows; i += 4 {
-			p[i] = root
-		}
-		for i := 2; i < rows; i += 4 {
-			if r.f() < 0.4 {
-				p[i] = root + []int{0, 7, 12}[r.n(3)]
-			}
-		}
-		return
-	}},
-	{lead, 1, func(r *rng, pat int) (p [rows]int) {
-		deg := r.n(len(penta)) + len(penta) // start mid-range
-		density := 0.35
-		if pat%4 == 3 {
-			density = 0.6 // fills on the turnaround pattern
-		}
-		for i := 0; i < rows; i++ {
-			if r.f() > density {
-				continue
-			}
+	}
+	deg := 7 + r.n(7)
+	for i := 0; i < rows; i++ {
+		if r.f() < p.BellDensity {
 			deg += r.n(5) - 2
-			if deg < 0 {
-				deg = 0
-			}
-			if deg >= 2*len(penta) {
-				deg = 2*len(penta) - 1
-			}
-			p[i] = roots[pat%4] + 12*(deg/len(penta)) + penta[deg%len(penta)]
+			deg = max(3, min(deg, 17))
+			out[3][i] = trackRow{chord + 12*(deg/7) + p.Scale[deg%7], 0.55, 1, bell}
 		}
-		return
-	}},
-	{hat, 1, func(r *rng, pat int) (p [rows]int) {
-		for i := 2; i < rows; i += 4 {
-			p[i] = 80
-		}
-		for i := 0; i < rows; i += 2 {
-			if p[i] == 0 && r.f() < 0.15 {
-				p[i] = 80
-			}
-		}
-		return
-	}},
+	}
+	if pat%2 == 0 {
+		out[4][0] = trackRow{45, p.AirGain, 10, air}
+	}
+	return out
 }
 
 // ---- synth: io.Reader producing 16-bit LE stereo ----
 
 type Synth struct {
-	seed          uint64
+	params        Params
+	next          *Params // staged; applied at the next pattern boundary
 	samplesPerRow int
 	rowLeft       int
 	row, pat      int
 	voices        []Voice
-	pats          [][rows]int // current pattern per track
-	dl, dr        []float64   // delay lines
+	pats          [nTracks][rows]trackRow
+	dl, dr        []float64 // delay lines
 	dpos          int
 	dbus          float64
 }
 
-func NewSynth(seed uint64, bpm float64) *Synth {
-	spr := int(sampleRate * 60 / (bpm * 4)) // 4 rows per beat
-	return &Synth{
-		seed:          seed,
-		samplesPerRow: spr,
-		voices:        make([]Voice, len(tracks)),
-		pats:          make([][rows]int, len(tracks)),
-		dl:            make([]float64, spr*3), // dotted eighth
-		dr:            make([]float64, spr*3),
+func NewSynth(p Params) *Synth {
+	s := &Synth{voices: make([]Voice, nTracks)}
+	s.apply(p)
+	return s
+}
+
+// SetParameters stages a new parameter map; it takes effect at the next
+// pattern boundary (the audio/set-parameters contract).
+func (s *Synth) SetParameters(p Params) { s.next = &p }
+
+func (s *Synth) apply(p Params) {
+	s.params = p
+	s.samplesPerRow = int(sampleRate * 60 / (p.BPM * 2)) // 2 rows per beat: ambient rows are long
+	if s.dl == nil {
+		s.dl = make([]float64, s.samplesPerRow*3)
+		s.dr = make([]float64, s.samplesPerRow*3)
 	}
 }
 
 func (s *Synth) step() {
 	if s.row == 0 {
-		for t := range tracks {
-			r := rng{s.seed ^ uint64(s.pat)*0x9e3779b97f4a7c15 ^ uint64(t)<<32 | 1}
-			s.pats[t] = tracks[t].gen(&r, s.pat)
+		if s.next != nil {
+			s.apply(*s.next)
+			s.next = nil
 		}
+		s.pats = buildPatterns(s.params, s.pat)
 	}
-	for t := range tracks {
+	for t := 0; t < nTracks; t++ {
 		v := &s.voices[t]
-		if n := s.pats[t][s.row]; n != 0 {
-			v.trigger(tracks[t].patch, n, tracks[t].gateRows, s.seed+uint64(s.pat*rows+s.row))
+		if tr := s.pats[t][s.row]; tr.note != 0 {
+			v.trigger(tr.patch, tr.note, tr.gateRows, tr.gain, s.params.Seed+uint64(s.pat*rows+s.row))
 		} else if v.active && v.gate {
 			v.gateRows--
 			if v.gateRows <= 0 {
@@ -328,11 +377,11 @@ func (s *Synth) frame() (int16, int16) {
 	}
 	// cross-fed stereo delay
 	wl, wr := s.dl[s.dpos], s.dr[s.dpos]
-	s.dl[s.dpos] = s.dbus + wr*0.45
-	s.dr[s.dpos] = s.dbus*0.7 + wl*0.45
+	s.dl[s.dpos] = s.dbus + wr*0.5
+	s.dr[s.dpos] = s.dbus*0.7 + wl*0.5
 	s.dpos = (s.dpos + 1) % len(s.dl)
-	l += wl * 0.4
-	r += wr * 0.4
+	l += wl * 0.5
+	r += wr * 0.5
 	l, r = math.Tanh(l*0.8), math.Tanh(r*0.8)
 	return int16(l * 32000), int16(r * 32000)
 }
@@ -377,19 +426,21 @@ func writeWAV(path string, s *Synth, seconds float64) error {
 func main() {
 	play := flag.Bool("play", false, "play live (endless) via oto")
 	wav := flag.String("wav", "", "render to WAV file")
-	dur := flag.Float64("dur", 32, "WAV duration seconds")
-	seed := flag.Uint64("seed", 1, "generative seed")
-	bpm := flag.Float64("bpm", 112, "tempo")
+	dur := flag.Float64("dur", 48, "WAV duration seconds")
+	seed := flag.Uint64("seed", 1, "level seed")
+	depth := flag.Int("depth", 0, "dungeon depth: deeper = darker, slower, thicker")
 	flag.Parse()
 
-	s := NewSynth(*seed, *bpm)
+	p := DeriveParams(*seed, *depth)
+	s := NewSynth(p)
+	desc := fmt.Sprintf("seed=%d depth=%d bpm=%.0f root=%d", *seed, *depth, p.BPM, p.Root)
 	switch {
 	case *wav != "":
 		if err := writeWAV(*wav, s, *dur); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		fmt.Printf("rendered %.0fs seed=%d bpm=%.0f -> %s\n", *dur, *seed, *bpm, *wav)
+		fmt.Printf("rendered %.0fs %s -> %s\n", *dur, desc, *wav)
 	case *play:
 		ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
 			SampleRate:   sampleRate,
@@ -401,9 +452,9 @@ func main() {
 			os.Exit(1)
 		}
 		<-ready
-		p := ctx.NewPlayer(io.Reader(s))
-		p.Play()
-		fmt.Printf("playing seed=%d bpm=%.0f — ctrl-c to stop\n", *seed, *bpm)
+		pl := ctx.NewPlayer(io.Reader(s))
+		pl.Play()
+		fmt.Printf("playing %s — ctrl-c to stop\n", desc)
 		select {}
 	default:
 		flag.Usage()
