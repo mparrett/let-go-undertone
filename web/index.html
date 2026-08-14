@@ -1,0 +1,51 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>sointu-homage</title>
+<style>
+  body { background: #111; color: #cbd; font: 16px/1.5 monospace; display: grid; place-items: center; min-height: 100vh; margin: 0; }
+  #panel { text-align: center; }
+  #status { color: #7a8; }
+  a { color: #9ab; }
+</style>
+<div id="panel">
+  <h1>sointu-homage</h1>
+  <p id="status">loading wasm…</p>
+  <p>depth via <a href="?depth=0">?depth=0</a> … <a href="?depth=5">?depth=5</a>, seed via <code>?seed=N</code></p>
+</div>
+<script src="wasm_exec.js"></script>
+<script>
+  // Capture AudioContext instances so we (and headless probes) can
+  // inspect state and resume on gesture regardless of oto internals.
+  window.__audioCtxs = [];
+  for (const name of ["AudioContext", "webkitAudioContext"]) {
+    const Orig = window[name];
+    if (!Orig) continue;
+    window[name] = function (...args) {
+      const ctx = new Orig(...args);
+      window.__audioCtxs.push(ctx);
+      return ctx;
+    };
+    window[name].prototype = Orig.prototype;
+  }
+
+  const q = new URLSearchParams(location.search);
+  const depth = q.get("depth") ?? "0";
+  const seed = q.get("seed") ?? "1";
+  const status = document.getElementById("status");
+
+  const go = new Go();
+  go.argv = ["homage", "-play", "-depth", depth, "-seed", seed];
+  WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject)
+    .then((r) => {
+      status.textContent = `depth ${depth}, seed ${seed} — click anywhere to start`;
+      go.run(r.instance);
+    })
+    .catch((e) => { status.textContent = "wasm failed: " + e; });
+
+  const resume = () => {
+    window.__audioCtxs.forEach((c) => c.resume());
+    status.textContent = `playing — depth ${depth}, seed ${seed}`;
+  };
+  addEventListener("click", resume);
+  addEventListener("keydown", resume);
+</script>

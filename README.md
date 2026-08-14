@@ -34,3 +34,17 @@ Also the phase-A datapoint for the glplat audio spike
 (`glplat-sdl3-audio-spike-spec-2026-08-14.md`, phase A decided for Oto): the
 Oto lane — `oto/v3` + purego, no cgo, no runtime dylib — initialized and
 streamed a live `io.Reader` on this Mac with zero friction (2026-08-14).
+
+## Browser (Go wasm + oto-js)
+
+```
+GOOS=js GOARCH=wasm go build -o web/main.wasm .
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" web/
+python3 -m http.server 8899 -d web   # any static server works: no SAB
+open http://localhost:8899/?depth=3                # click to start (autoplay policy)
+```
+
+Same engine, no ebiten runner — verified headless 2026-08-14 (AudioContext
+running at 44.1 kHz, clock advancing, checked by a headless browser probe).
+This retires the spike-spec caveat that Oto's wasm lane was only proven
+inside ebiten web games.
