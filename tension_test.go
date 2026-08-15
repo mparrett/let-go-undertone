@@ -3,7 +3,7 @@ package main
 import "testing"
 
 func TestTensionZeroIsInert(t *testing.T) {
-	p := DeriveParams(1, 5, 0)
+	p := DeriveDungeon(1, 5, 0)
 	if p.PulseGain != 0 {
 		t.Fatalf("tension 0 must silence the pulse track, got gain %v", p.PulseGain)
 	}
@@ -19,8 +19,8 @@ func TestTensionZeroIsInert(t *testing.T) {
 }
 
 func TestTensionOneAgitates(t *testing.T) {
-	calm := DeriveParams(1, 5, 0)
-	hot := DeriveParams(1, 5, 1)
+	calm := DeriveDungeon(1, 5, 0)
+	hot := DeriveDungeon(1, 5, 1)
 	if hot.BPM <= calm.BPM {
 		t.Fatalf("tension must raise tempo: %v <= %v", hot.BPM, calm.BPM)
 	}
@@ -40,5 +40,26 @@ func TestTensionOneAgitates(t *testing.T) {
 	if hot.BellDensity >= calm.BellDensity || hot.PadDensity >= calm.PadDensity {
 		t.Fatalf("tension should thin the calm layers: bells %v>=%v or pads %v>=%v",
 			hot.BellDensity, calm.BellDensity, hot.PadDensity, calm.PadDensity)
+	}
+}
+
+func TestOverworldIsBrighter(t *testing.T) {
+	dun := DeriveDungeon(1, 3, 0)
+	over := DeriveOverworld(1, 3, 0)
+	if over.Root <= dun.Root {
+		t.Fatalf("overworld root should sit higher: %d <= %d", over.Root, dun.Root)
+	}
+	if over.FifthOffset != -8 {
+		t.Fatalf("calm overworld wants the major third, got %d", over.FifthOffset)
+	}
+	if over.BellDensity <= dun.BellDensity || over.BellLift != 12 {
+		t.Fatalf("overworld bells should be denser and lifted: %v vs %v, lift %d",
+			over.BellDensity, dun.BellDensity, over.BellLift)
+	}
+	if over.DroneGain >= dun.DroneGain {
+		t.Fatalf("overworld drone is a bed, not a weight: %v >= %v", over.DroneGain, dun.DroneGain)
+	}
+	if DeriveOverworld(1, 3, 1).FifthOffset != -11 {
+		t.Fatal("overworld tension should reach the same dread interval")
 	}
 }

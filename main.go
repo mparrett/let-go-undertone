@@ -193,6 +193,28 @@ var bell = Patch{
 	{opOut, [4]float64{0.5, 0.6}},
 }
 
+// overworld drone: sine pair — a bed, not a weight
+var bed = Patch{
+	{opEnv, [4]float64{3, 2, 1, 4}},
+	{opOsc, [4]float64{-0.05, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.6, 0.45}},
+	{opEnv, [4]float64{3, 2, 1, 4}},
+	{opOsc, [4]float64{0.05, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.6, 0.55}},
+}
+
+// overworld air: same shape as air, opened up — wind, not rumble
+var breeze = Patch{
+	{opEnv, [4]float64{2, 2, 0.5, 3}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{1400, 0, 0, 0}},
+	{opLpf, [4]float64{1400, 0, 0, 0}},
+	{opOut, [4]float64{0.9, 0.5}},
+}
+
 // tension pulse: a soft swept-sine tom, descendant of the techno kick
 var pulse = Patch{
 	{opEnv, [4]float64{0.002, 0.15, 0, 0.08}},
@@ -227,8 +249,18 @@ type Params struct {
 	AirGain     float64
 	PulseGain   float64 // tension pulse track level (0 = silent)
 	FifthOffset int     // second drone's interval below the chord; slides dissonant with tension
+	BellLift    int     // semitones added to bell notes (overworld sparkle register)
+	Palette     Palette // the mood's patch bank
 	Seed        uint64
 }
+
+// Palette is a mood's patch bank: mood = patches + a point in parameter space.
+type Palette struct {
+	Drone, Fifth, Pad, Bell, Air, Pulse Patch
+}
+
+var dungeonPalette = Palette{Drone: drone, Fifth: pad, Pad: pad, Bell: bell, Air: air, Pulse: pulse}
+var overworldPalette = Palette{Drone: bed, Fifth: pad, Pad: pad, Bell: bell, Air: breeze, Pulse: pulse}
 
 var scalesByDarkness = [][]int{
 	{0, 2, 3, 5, 7, 9, 10}, // dorian
@@ -236,24 +268,35 @@ var scalesByDarkness = [][]int{
 	{0, 1, 3, 5, 7, 8, 10}, // phrygian
 }
 
-// DeriveParams maps game state to music. Depth darkens (where you are);
+var scalesByBrightness = [][]int{
+	{0, 2, 4, 5, 7, 9, 10}, // mixolydian
+	{0, 2, 4, 5, 7, 9, 11}, // major
+	{0, 2, 4, 6, 7, 9, 11}, // lydian
+}
+
+// tenseOffset slides the second drone's interval toward dissonance: the
+// mood's calm interval, then tritone, then minor-ninth territory.
+func tenseOffset(calm int, t float64) int {
+	switch {
+	case t >= 0.75:
+		return -11
+	case t >= 0.4:
+		return -6
+	}
+	return calm
+}
+
+// DeriveDungeon maps game state to music. Depth darkens (where you are);
 // tension 0..1 agitates (what's happening): tempo up, pulse in, the second
 // drone slides fifth -> tritone -> minor ninth, calm layers thin out.
 // tension 0 reproduces the pre-tension output exactly (no extra rng draws).
-func DeriveParams(seed uint64, depth int, tension float64) Params {
+func DeriveDungeon(seed uint64, depth int, tension float64) Params {
 	r := rng{seed ^ uint64(depth)*0x9e3779b97f4a7c15 | 1}
 	d := float64(depth)
 	t := math.Max(0, math.Min(1, tension))
 	darkness := depth / 2
 	if darkness >= len(scalesByDarkness) {
 		darkness = len(scalesByDarkness) - 1
-	}
-	fifth := -5 // perfect fifth above the low drone
-	switch {
-	case t >= 0.75:
-		fifth = -11 // minor ninth territory: dread
-	case t >= 0.4:
-		fifth = -6 // tritone
 	}
 	return Params{
 		BPM:         math.Max(46, 66-3*d) + float64(r.n(5)) + 30*t,
@@ -265,7 +308,37 @@ func DeriveParams(seed uint64, depth int, tension float64) Params {
 		BellDensity: math.Max(0.04, 0.16-0.02*d) * (1 - 0.5*t),
 		AirGain:     math.Min(0.6, 0.25+0.05*d) + 0.1*t,
 		PulseGain:   t,
-		FifthOffset: fifth,
+		FifthOffset: tenseOffset(-5, t), // perfect fifth above the low drone
+		Palette:     dungeonPalette,
+		Seed:        seed,
+	}
+}
+
+// DeriveOverworld is the bright mirror: elevation raises and opens
+// (mixolydian -> major -> lydian, higher root, denser lifted bells,
+// breeze instead of rumble); tension works unchanged — brightness
+// collapsing into the same tritone/minor-ninth dread.
+func DeriveOverworld(seed uint64, elevation int, tension float64) Params {
+	r := rng{seed ^ uint64(elevation)*0x9e3779b97f4a7c15 | 1}
+	e := float64(elevation)
+	t := math.Max(0, math.Min(1, tension))
+	brightness := elevation / 2
+	if brightness >= len(scalesByBrightness) {
+		brightness = len(scalesByBrightness) - 1
+	}
+	return Params{
+		BPM:         74 + 3*e + float64(r.n(5)) + 30*t,
+		Root:        62 + elevation + []int{-2, 0, 0, 3}[r.n(4)],
+		Scale:       scalesByBrightness[brightness],
+		DroneGain:   0.25 + 0.03*e,
+		FifthGain:   0.3 + 0.05*e + 0.25*t,
+		PadDensity:  0.7 * (1 - 0.6*t),
+		BellDensity: (0.2 + 0.04*e) * (1 - 0.5*t),
+		AirGain:     0.15 + 0.02*e + 0.1*t,
+		PulseGain:   t,
+		FifthOffset: tenseOffset(-8, t), // major third above the low drone: sunshine
+		BellLift:    12,
+		Palette:     overworldPalette,
 		Seed:        seed,
 	}
 }
@@ -301,16 +374,16 @@ func buildPatterns(p Params, pat int) [nTracks][rows]trackRow {
 	r := rng{p.Seed ^ uint64(pat)*0x9e3779b97f4a7c15 | 1}
 	chord := p.Root + []int{0, 0, p.Scale[5] - 12, p.Scale[3] - 12}[r.n(4)]
 
-	out[0][0] = trackRow{chord - 12, p.DroneGain, rows, drone}
+	out[0][0] = trackRow{chord - 12, p.DroneGain, rows, p.Palette.Drone}
 	if p.FifthGain > 0.01 {
 		// pad patch (sine pair), not the saw drone: the fifth should
 		// thicken with depth, not brighten
-		out[1][0] = trackRow{chord + p.FifthOffset, p.FifthGain, rows, pad}
+		out[1][0] = trackRow{chord + p.FifthOffset, p.FifthGain, rows, p.Palette.Fifth}
 	}
 	for _, row := range []int{0, 8} {
 		if r.f() < p.PadDensity {
 			deg := []int{0, 2, 4}[r.n(3)]
-			out[2][row] = trackRow{chord + p.Scale[deg], 0.7, 6, pad}
+			out[2][row] = trackRow{chord + p.Scale[deg], 0.7, 6, p.Palette.Pad}
 		}
 	}
 	deg := 7 + r.n(7)
@@ -318,28 +391,28 @@ func buildPatterns(p Params, pat int) [nTracks][rows]trackRow {
 		if r.f() < p.BellDensity {
 			deg += r.n(5) - 2
 			deg = max(3, min(deg, 17))
-			out[3][i] = trackRow{chord + 12*(deg/7) + p.Scale[deg%7], 0.55, 1, bell}
+			out[3][i] = trackRow{chord + 12*(deg/7) + p.Scale[deg%7] + p.BellLift, 0.55, 1, p.Palette.Bell}
 		}
 	}
 	if pat%2 == 0 {
-		out[4][0] = trackRow{45, p.AirGain, 10, air}
+		out[4][0] = trackRow{45, p.AirGain, 10, p.Palette.Air}
 	}
 	// tension pulse: heartbeat on 0/8, agitation fills as tension rises.
 	// Guarded so tension 0 draws no rng and leaves the stream untouched.
 	if p.PulseGain > 0.01 {
 		note := chord - 24
 		g := 0.35 + 0.45*p.PulseGain
-		out[5][0] = trackRow{note, g, 1, pulse}
-		out[5][8] = trackRow{note, g, 1, pulse}
+		out[5][0] = trackRow{note, g, 1, p.Palette.Pulse}
+		out[5][8] = trackRow{note, g, 1, p.Palette.Pulse}
 		for _, row := range []int{4, 12} {
 			if r.f() < p.PulseGain {
-				out[5][row] = trackRow{note, g * 0.8, 1, pulse}
+				out[5][row] = trackRow{note, g * 0.8, 1, p.Palette.Pulse}
 			}
 		}
 		if p.PulseGain > 0.7 {
 			for _, row := range []int{6, 14} {
 				if r.f() < (p.PulseGain-0.7)*2 {
-					out[5][row] = trackRow{note + 12, g * 0.5, 1, pulse}
+					out[5][row] = trackRow{note + 12, g * 0.5, 1, p.Palette.Pulse}
 				}
 			}
 		}
@@ -521,14 +594,25 @@ func main() {
 	wav := flag.String("wav", "", "render to WAV file")
 	dur := flag.Float64("dur", 48, "WAV duration seconds")
 	seed := flag.Uint64("seed", 1, "level seed")
-	depth := flag.Int("depth", 0, "dungeon depth: deeper = darker, slower, thicker")
+	depth := flag.Int("depth", 0, "dungeon depth (negative = overworld elevation)")
+	mood := flag.String("mood", "dungeon", "dungeon | overworld (elevation = depth)")
 	tension := flag.Float64("tension", 0, "0..1: tempo up, pulse in, harmony sours")
 	vu := flag.String("vu", "bars", "meter style: bars | compact (one cell per band) | tall (two cells, 2x range)")
 	flag.Parse()
 
-	p := DeriveParams(*seed, *depth, *tension)
+	level := *depth
+	if level < 0 { // signed-depth sugar: -3 means overworld elevation 3
+		*mood, level = "overworld", -level
+	}
+	var p Params
+	switch *mood {
+	case "overworld":
+		p = DeriveOverworld(*seed, level, *tension)
+	default:
+		p = DeriveDungeon(*seed, level, *tension)
+	}
 	s := NewSynth(p)
-	desc := fmt.Sprintf("seed=%d depth=%d tension=%.2f bpm=%.0f root=%d", *seed, *depth, *tension, p.BPM, p.Root)
+	desc := fmt.Sprintf("mood=%s seed=%d level=%d tension=%.2f bpm=%.0f root=%d", *mood, *seed, level, *tension, p.BPM, p.Root)
 	switch {
 	case *wav != "":
 		if err := writeWAV(*wav, s, *dur); err != nil {

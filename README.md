@@ -26,8 +26,15 @@ proposes for `audio/set-parameters`
 go run . -play                        # live, endless, via oto
 go run . -play -depth 5               # deeper: darker, slower, thicker
 go run . -play -depth 5 -tension 1    # danger: faster, pulse in, harmony sours
+go run . -play -mood overworld -depth 3   # bright mirror (-depth -3 is sugar)
 go run . -wav out.wav -depth 2        # deterministic offline render
 ```
+
+Two moods, each a patch palette + a derivation over (level, tension):
+`dungeon` (minor ladder, saw drone, fifth) and `overworld` (mixolydian →
+major → lydian by elevation, sine bed, major third, lifted denser bells,
+breeze instead of rumble). Tension is mood-independent — overworld
+tension is brightness collapsing into the same tritone/minor-ninth dread.
 
 Tension (0..1) is the second game-state axis: depth says *where you are*,
 tension says *what's happening*. It raises tempo, fades in a low pulse
