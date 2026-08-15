@@ -66,9 +66,41 @@ func isTTY() bool {
 	return err == nil && st.Mode()&os.ModeCharDevice != 0
 }
 
+// vertical eighth-blocks for the compact one-cell-per-band mode
+var vuVert = []string{"", "\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2586", "\u2587", "\u2588"}
+
+// compactCell renders one band in a single cell: 17 levels — blank + the 8
+// vertical eighths at two ANSI intensities, interleaved (dim \u2581, bright \u2581,
+// dim \u2582, ...). Unicode has no hashed eighths (\u2591\u2592\u2593 are full-cell only),
+// so intensity supplies the extra bit. No-color terminals degrade to 9 levels.
+func compactCell(b *strings.Builder, v float64, color bool) {
+	idx := int(math.Min(math.Pow(v, 0.4)*16, 16) + 0.5)
+	if idx == 0 {
+		b.WriteString(" ")
+		return
+	}
+	if color {
+		switch {
+		case idx >= 15:
+			b.WriteString("\x1b[31m")
+		case idx >= 11:
+			b.WriteString("\x1b[33m")
+		default:
+			b.WriteString("\x1b[32m")
+		}
+		if idx%2 == 1 {
+			b.WriteString("\x1b[2m")
+		}
+	}
+	b.WriteString(vuVert[(idx+1)/2])
+	if color {
+		b.WriteString("\x1b[0m")
+	}
+}
+
 // runMeterUI redraws a single carriage-return line of band meters ~30x/s.
 // Never returns; ctrl-c restores the cursor and exits.
-func runMeterUI(s *Synth, desc string) {
+func runMeterUI(s *Synth, desc, style string) {
 	fmt.Printf("playing %s — ctrl-c to stop\n", desc)
 	tty := isTTY()
 	if tty {
@@ -87,6 +119,18 @@ func runMeterUI(s *Synth, desc string) {
 		var b strings.Builder
 		b.WriteString("\r ")
 		for i, v := range s.Levels() {
+			if style == "compact" {
+				if tty {
+					b.WriteString("\x1b[2m")
+				}
+				fmt.Fprintf(&b, "%s ", names[i])
+				if tty {
+					b.WriteString("\x1b[0m")
+				}
+				compactCell(&b, v, tty)
+				b.WriteString("  ")
+				continue
+			}
 			peaks[i] = math.Max(v, peaks[i]*0.97)
 			if tty {
 				b.WriteString("\x1b[2m")

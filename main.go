@@ -478,6 +478,7 @@ func main() {
 	dur := flag.Float64("dur", 48, "WAV duration seconds")
 	seed := flag.Uint64("seed", 1, "level seed")
 	depth := flag.Int("depth", 0, "dungeon depth: deeper = darker, slower, thicker")
+	vu := flag.String("vu", "bars", "meter style: bars | compact (one cell per band)")
 	flag.Parse()
 
 	p := DeriveParams(*seed, *depth)
@@ -503,7 +504,7 @@ func main() {
 		<-ready
 		pl := ctx.NewPlayer(io.Reader(s))
 		pl.Play()
-		runMeterUI(s, desc)
+		runMeterUI(s, desc, *vu)
 	default:
 		flag.Usage()
 	}
