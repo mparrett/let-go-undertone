@@ -414,14 +414,14 @@ func DeriveDungeon(seed uint64, depth int, tension float64) Params {
 		darkness = len(scalesByDarkness) - 1
 	}
 	p := Params{
-		BPM:         math.Max(46, 66-3*d) + float64(r.n(5)) + 30*t,
+		BPM:         math.Max(46, 66-float64(3*d)) + float64(r.n(5)) + float64(30*t),
 		Root:        57 - depth + []int{-2, 0, 0, 3}[r.n(4)],
 		Scale:       scalesByDarkness[darkness],
-		DroneGain:   math.Min(0.9, 0.55+0.06*d),
-		FifthGain:   math.Min(0.7, 0.2*d) + 0.25*t,
-		PadDensity:  (0.6 - 0.05*d) * (1 - 0.6*t),
-		BellDensity: math.Max(0.04, 0.16-0.02*d) * (1 - 0.5*t),
-		AirGain:     math.Min(0.6, 0.25+0.05*d) + 0.1*t,
+		DroneGain:   math.Min(0.9, 0.55+float64(0.06*d)),
+		FifthGain:   math.Min(0.7, 0.2*d) + float64(0.25*t),
+		PadDensity:  (0.6 - float64(0.05*d)) * (1 - float64(0.6*t)),
+		BellDensity: math.Max(0.04, 0.16-float64(0.02*d)) * (1 - float64(0.5*t)),
+		AirGain:     math.Min(0.6, 0.25+float64(0.05*d)) + float64(0.1*t),
 		PulseGain:   t,
 		FifthOffset: tenseOffset(-5, t), // perfect fifth above the low drone
 		Palette:     dungeonPalette,
@@ -444,14 +444,14 @@ func DeriveOverworld(seed uint64, elevation int, tension float64) Params {
 		brightness = len(scalesByBrightness) - 1
 	}
 	p := Params{
-		BPM:         74 + 3*e + float64(r.n(5)) + 30*t,
+		BPM:         74 + float64(3*e) + float64(r.n(5)) + float64(30*t),
 		Root:        62 + elevation + []int{-2, 0, 0, 3}[r.n(4)],
 		Scale:       scalesByBrightness[brightness],
-		DroneGain:   0.25 + 0.03*e,
-		FifthGain:   0.3 + 0.05*e + 0.25*t,
-		PadDensity:  0.7 * (1 - 0.6*t),
-		BellDensity: (0.2 + 0.04*e) * (1 - 0.5*t),
-		AirGain:     0.15 + 0.02*e + 0.1*t,
+		DroneGain:   0.25 + float64(0.03*e),
+		FifthGain:   0.3 + float64(0.05*e) + float64(0.25*t),
+		PadDensity:  0.7 * (1 - float64(0.6*t)),
+		BellDensity: (0.2 + float64(0.04*e)) * (1 - float64(0.5*t)),
+		AirGain:     0.15 + float64(0.02*e) + float64(0.1*t),
 		PulseGain:   t,
 		FifthOffset: tenseOffset(-8, t), // major third above the low drone: sunshine
 		BellLift:    12,
