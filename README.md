@@ -61,7 +61,7 @@ streamed a live `io.Reader` on this Mac with zero friction (2026-08-14).
 ```
 GOOS=js GOARCH=wasm go build -o web/main.wasm .
 cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" web/
-python3 -m http.server 8899 -d web   # any static server works: no SAB
+python3 serve.py 8899        # LAN + no-cache dev server (any static server works: no SAB)
 open http://localhost:8899/?depth=3                # click to start (autoplay policy)
 ```
 

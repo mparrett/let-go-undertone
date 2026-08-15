@@ -59,10 +59,12 @@
   const go = new Go();
   go.argv = ["homage", "-play", "-mood", mood, "-depth", depth, "-seed", seed, "-tension", tension];
   if (lead) go.argv.push("-lead", lead);
-  WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject)
+  // no-cache: revalidate so a stale cached binary can't silently reject new flags
+  WebAssembly.instantiateStreaming(fetch("main.wasm", { cache: "no-cache" }), go.importObject)
     .then((r) => {
       status.textContent = `${mood} ${depth}, seed ${seed}, tension ${tension} — click anywhere to start`;
-      go.run(r.instance);
+      // the program never returns in normal play; resolving means it exited (e.g. flag error)
+      go.run(r.instance).then(() => { status.textContent = "wasm exited — see console"; });
     })
     .catch((e) => { status.textContent = "wasm failed: " + e; });
 
