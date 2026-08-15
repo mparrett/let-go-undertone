@@ -30,7 +30,7 @@
   </div>
   <p id="status">loading wasm…</p>
   <div id="scenes"></div>
-  <p><code>?mood= ?depth= ?seed= ?tension=</code></p>
+  <p><code>?mood= ?depth= ?seed= ?tension= ?lead=</code></p>
 </div>
 <script src="wasm_exec.js"></script>
 <script>
@@ -53,10 +53,12 @@
   const seed = q.get("seed") ?? "1";
   const tension = q.get("tension") ?? "0";
   const mood = q.get("mood") ?? "dungeon";
+  const lead = q.get("lead") ?? "";
   const status = document.getElementById("status");
 
   const go = new Go();
   go.argv = ["homage", "-play", "-mood", mood, "-depth", depth, "-seed", seed, "-tension", tension];
+  if (lead) go.argv.push("-lead", lead);
   WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject)
     .then((r) => {
       status.textContent = `${mood} ${depth}, seed ${seed}, tension ${tension} — click anywhere to start`;
@@ -83,6 +85,9 @@
     ["the summit",      "?mood=overworld&depth=5"],
     ["summit chase",    "?mood=overworld&depth=5&tension=0.8"],
     ["another world",   "?depth=3&seed=42"],
+    ["harp of the deep","?depth=3&lead=pluck"],
+    ["haunted foundry", "?depth=4&lead=clang&tension=0.4"],
+    ["kalimba fields",  "?mood=overworld&depth=2&lead=kalimba"],
   ];
   const sc = document.getElementById("scenes");
   for (const [name, qs] of scenes) {
@@ -91,7 +96,8 @@
     a.textContent = name;
     const p = new URLSearchParams(qs);
     if ((p.get("mood") ?? "dungeon") === mood && (p.get("depth") ?? "0") === depth &&
-        (p.get("tension") ?? "0") === tension && (p.get("seed") ?? "1") === seed) {
+        (p.get("tension") ?? "0") === tension && (p.get("seed") ?? "1") === seed &&
+        (p.get("lead") ?? "") === lead) {
       a.className = "active";
     }
     sc.appendChild(a);

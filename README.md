@@ -30,6 +30,12 @@ go run . -play -mood overworld -depth 3   # bright mirror (-depth -3 is sugar)
 go run . -wav out.wav -depth 2        # deterministic offline render
 ```
 
+The lead (bell) slot is a six-instrument library — bell, chime
+(inharmonic partials), clang (ring-mod), kalimba, reed, and a
+Karplus-Strong pluck — mood-weighted and picked by the seed, so two
+seeds differ in instrument, not just notes. Override with `-lead name`
+/ `?lead=name`.
+
 Two moods, each a patch palette + a derivation over (level, tension):
 `dungeon` (minor ladder, saw drone, fifth) and `overworld` (mixolydian →
 major → lydian by elevation, sine bed, major third, lifted denser bells,

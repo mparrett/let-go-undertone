@@ -30,12 +30,13 @@ const sampleRate = 44100
 // ---- unit VM ----
 
 const (
-	opEnv  = iota // p: attack s, decay s, sustain lvl, release s   -> push env
-	opOsc         // p: transpose semis, shape, sweep semis, sweep decay s -> push sample
-	opMul         // pop a, b -> push a*b
-	opLpf         // p: cutoff Hz; pop x -> push lowpassed x
-	opSend        // p: amount; peek top, add top*amount to delay bus
-	opOut         // p: gain, pan 0..1; pop x -> accumulate to L/R
+	opEnv   = iota // p: attack s, decay s, sustain lvl, release s   -> push env
+	opOsc          // p: transpose semis, shape, sweep semis, sweep decay s -> push sample
+	opMul          // pop a, b -> push a*b
+	opLpf          // p: cutoff Hz; pop x -> push lowpassed x
+	opSend         // p: amount; peek top, add top*amount to delay bus
+	opOut          // p: gain, pan 0..1; pop x -> accumulate to L/R
+	opPluck        // p: transpose semis, feedback; Karplus-Strong string -> push sample
 )
 
 const (
@@ -57,6 +58,8 @@ type ustate struct {
 	phase, env, lp, sweep float64
 	stage                 int // env: 0 attack, 1 decay, 2 sustain, 3 release
 	rng                   uint64
+	ks                    []float64 // Karplus-Strong delay line, allocated on first sample
+	kpos                  int
 }
 
 type Voice struct {
@@ -146,6 +149,27 @@ func (v *Voice) run(l, r, delay *float64) {
 			c := 1 - math.Exp(-2*math.Pi*u.p[0]/sampleRate)
 			s.lp += c * (stack[sp-1] - s.lp)
 			stack[sp-1] = s.lp
+		case opPluck:
+			// Karplus-Strong: a noise burst circulating in a delay line
+			// the length of the period, averaged (lowpassed) each pass.
+			if s.ks == nil {
+				freq := 440 * math.Pow(2, (float64(v.note)+u.p[0]-69)/12)
+				n := int(sampleRate / freq)
+				if n < 2 {
+					n = 2
+				}
+				s.ks = make([]float64, n)
+				for i := range s.ks {
+					s.rng = s.rng*6364136223846793005 + 1442695040888963407
+					s.ks[i] = float64(int64(s.rng>>11))/(1<<52) - 1
+				}
+			}
+			x := s.ks[s.kpos]
+			next := s.ks[(s.kpos+1)%len(s.ks)]
+			s.ks[s.kpos] = (x + next) * 0.5 * u.p[1]
+			s.kpos = (s.kpos + 1) % len(s.ks)
+			stack[sp] = x
+			sp++
 		case opSend:
 			*delay += stack[sp-1] * u.p[0] * v.gain
 		case opOut:
@@ -238,6 +262,16 @@ var kalimba = Patch{
 	{opOut, [4]float64{0.2, 0.45}},
 }
 
+// pluck: Karplus-Strong string — harp/lute, the sound the osc set can't fake
+var pluck = Patch{
+	{opEnv, [4]float64{0.001, 2.5, 0, 0.4}},
+	{opPluck, [4]float64{0, 0.996, 0, 0}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{2600, 0, 0, 0}},
+	{opSend, [4]float64{0.45, 0, 0, 0}},
+	{opOut, [4]float64{0.55, 0.55}},
+}
+
 // reed: filtered pulse, slow attack, sustained — breath, needs a longer gate
 var reed = Patch{
 	{opEnv, [4]float64{0.15, 0.5, 0.5, 0.25}},
@@ -324,12 +358,13 @@ var leadLib = map[string]leadDef{
 	"clang":   {"clang", clang, 1},
 	"kalimba": {"kalimba", kalimba, 1},
 	"reed":    {"reed", reed, 3},
+	"pluck":   {"pluck", pluck, 1},
 }
 
 // mood-weighted audition lists; the seed picks (kaiju trick applied to
 // timbre: two seeds differ in instrument, not just notes)
-var dungeonLeads = []string{"bell", "chime", "chime", "clang", "kalimba"}
-var overworldLeads = []string{"bell", "bell", "kalimba", "kalimba", "reed"}
+var dungeonLeads = []string{"bell", "chime", "chime", "clang", "kalimba", "pluck", "pluck"}
+var overworldLeads = []string{"bell", "bell", "kalimba", "kalimba", "reed", "pluck", "pluck"}
 
 // pickLead draws from a separate rng stream so the pattern content for a
 // given seed is unchanged — only the instrument varies.
@@ -690,7 +725,7 @@ func main() {
 	seed := flag.Uint64("seed", 1, "level seed")
 	depth := flag.Int("depth", 0, "dungeon depth (negative = overworld elevation)")
 	mood := flag.String("mood", "dungeon", "dungeon | overworld (elevation = depth)")
-	lead := flag.String("lead", "", "lead instrument: bell|chime|clang|kalimba|reed (default: seed picks)")
+	lead := flag.String("lead", "", "lead instrument: bell|chime|clang|kalimba|reed|pluck (default: seed picks)")
 	tension := flag.Float64("tension", 0, "0..1: tempo up, pulse in, harmony sours")
 	vu := flag.String("vu", "bars", "meter style: bars | compact (one cell per band) | tall (two cells, 2x range)")
 	flag.Parse()
