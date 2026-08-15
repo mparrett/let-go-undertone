@@ -15,6 +15,9 @@
   #vu .curtain { position: absolute; top: 0; left: 0; right: 0; height: 100%; background: #111; transition: height 40ms linear; }
   #vu .peak { position: absolute; left: 0; right: 0; height: 2px; background: #dcb; bottom: 0%; }
   #vu .lbl { color: #678; margin-top: 6px; font-size: 12px; text-align: center; }
+  #scenes { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 34em; margin: 18px auto 6px; }
+  #scenes a { color: #9ab; text-decoration: none; border: 1px solid #345; border-radius: 4px; padding: 3px 10px; font-size: 13px; }
+  #scenes a.active { color: #cdE; border-color: #7a8; background: #1a2420; }
 </style>
 <div id="panel">
   <h1>undertone</h1>
@@ -26,8 +29,8 @@
     <div class="band"><div class="meter"><div class="curtain"></div><div class="peak"></div></div><div class="lbl">hi</div></div>
   </div>
   <p id="status">loading wasm…</p>
-  <p><a href="?depth=5">dungeon 5</a> · <a href="?mood=overworld&depth=3">overworld 3</a> ·
-     <a href="?depth=3&tension=1">tension 1</a> — <code>?mood= ?depth= ?seed= ?tension=</code></p>
+  <div id="scenes"></div>
+  <p><code>?mood= ?depth= ?seed= ?tension=</code></p>
 </div>
 <script src="wasm_exec.js"></script>
 <script>
@@ -67,6 +70,32 @@
   };
   addEventListener("click", resume);
   addEventListener("keydown", resume);
+
+  // scene chips: curated param combos, easy to edit
+  const scenes = [
+    ["entrance",        "?depth=0"],
+    ["mid dungeon",     "?depth=3"],
+    ["the abyss",       "?depth=5"],
+    ["abyss panic",     "?depth=5&tension=1"],
+    ["something stalks","?depth=3&tension=0.5"],
+    ["meadow",          "?mood=overworld&depth=0"],
+    ["highlands",       "?mood=overworld&depth=3"],
+    ["the summit",      "?mood=overworld&depth=5"],
+    ["summit chase",    "?mood=overworld&depth=5&tension=0.8"],
+    ["another world",   "?depth=3&seed=42"],
+  ];
+  const sc = document.getElementById("scenes");
+  for (const [name, qs] of scenes) {
+    const a = document.createElement("a");
+    a.href = qs;
+    a.textContent = name;
+    const p = new URLSearchParams(qs);
+    if ((p.get("mood") ?? "dungeon") === mood && (p.get("depth") ?? "0") === depth &&
+        (p.get("tension") ?? "0") === tension && (p.get("seed") ?? "1") === seed) {
+      a.className = "active";
+    }
+    sc.appendChild(a);
+  }
 
   // VU bars from the Go-side meter (window.__homageMeter, ~30 Hz);
   // same bands, ballistics, and peak-hold decay as the TUI meter.
