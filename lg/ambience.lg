@@ -1,0 +1,186 @@
+;; ambience.lg — the (game state -> music) derivation, in lg.
+;;
+;; This is the layer the audio surface sketch says belongs in the control
+;; language: a pure function from (seed, depth, tension) to a parameter map,
+;; handed to the engine through audio/set-parameters. Everything below the map
+;; — patches, the per-sample unit VM, the sequencer, the delay bus — stays in
+;; Go, because it runs at 44.1 kHz and lg has no business there.
+;;
+;; The payoff of having it here: the score is a pure function of the world, so
+;; it is moddable and console-tweakable, and the same seed and depth give the
+;; same ambience byte for byte.
+;;
+;; The kaiju-elements trick, unchanged from the Go original: taste lives in
+;; hand-tuned option tables, the seed only picks from them.
+
+(ns ambience)
+
+;; ---- seeded rng ----
+;; xorshift64 over int64. lg's Int is 64-bit, and bitwise ops do not
+;; overflow-check, so the shift/xor core ports directly. The multiplies do
+;; need unchecked-multiply: lg's `*` raises "integer overflow" rather than
+;; wrapping, which is the one real portability wrinkle in the whole file.
+
+;; 0x9e3779b97f4a7c15 and 0x1eadf00d, the Go original's mixing constants,
+;; written as signed int64 because lg has no unsigned integer type.
+(def golden -7046029254386353131)
+(def lead-salt 514715661)
+
+(defn xorshift
+  "One xorshift64 step. Returns the next state."
+  [s]
+  (let [s (bit-xor s (bit-shift-left s 13))
+        s (bit-xor s (unsigned-bit-shift-right s 7))
+        s (bit-xor s (bit-shift-left s 17))]
+    s))
+
+(defn umod
+  "Remainder of s treated as UNSIGNED by a small positive m.
+  The Go original does uint64 % m; a plain (mod s m) on a negative int64
+  disagrees, and that silently changes which option the seed picks. Splitting
+  s into its top 63 bits and its low bit keeps the arithmetic unsigned."
+  [s m]
+  (let [hi (unsigned-bit-shift-right s 1)
+        lo (bit-and s 1)]
+    (mod (+ (* 2 (mod hi m)) lo) m)))
+
+;; A draw returns [state value] so derivation stays pure — the option-table
+;; picks must happen in the same ORDER as the Go original or the streams
+;; diverge and the two ports stop agreeing.
+
+(defn draw-n
+  "Pick an index in [0,m): returns [state' index]."
+  [s m]
+  (let [s (xorshift s)]
+    [s (umod s m)]))
+
+(defn draw-pick
+  "Pick an element of coll: returns [state' element]."
+  [s coll]
+  (let [[s i] (draw-n s (count coll))]
+    [s (nth coll i)]))
+
+;; ---- option tables (the taste) ----
+
+(def scales-by-darkness
+  [[0 2 3 5 7 9 10]   ; dorian
+   [0 2 3 5 7 8 10]   ; aeolian
+   [0 1 3 5 7 8 10]]) ; phrygian
+
+(def scales-by-brightness
+  [[0 2 4 5 7 9 10]   ; mixolydian
+   [0 2 4 5 7 9 11]   ; major
+   [0 2 4 6 7 9 11]]) ; lydian
+
+(def root-offsets [-2 0 0 3])
+
+;; mood-weighted lead audition lists; repeats are the weights
+(def dungeon-leads   [:bell :chime :chime :clang :kalimba :pluck :pluck])
+(def overworld-leads [:bell :bell :kalimba :kalimba :reed :pluck :pluck])
+
+(defn tense-offset
+  "Slide the second drone's interval toward dissonance: the mood's calm
+  interval, then tritone, then minor-ninth territory."
+  [calm t]
+  (cond (>= t 0.75) -11
+        (>= t 0.4)  -6
+        :else       calm))
+
+(defn seed-state
+  "The derivation rng's starting state, mixing seed with the level."
+  [seed level]
+  (bit-or (bit-xor seed (unchecked-multiply level golden)) 1))
+
+(defn pick-lead
+  "Draw the lead from a SEPARATE rng stream, so for a given seed the pattern
+  content is unchanged and only the instrument varies."
+  [seed names]
+  (let [s (bit-or (unchecked-add (unchecked-multiply seed golden) lead-salt) 1)]
+    (second (draw-pick s names))))
+
+(defn clamp01 [t] (max 0.0 (min 1.0 (double t))))
+
+(defn scale-for [tables level]
+  (nth tables (min (quot level 2) (dec (count tables)))))
+
+;; ---- the two moods ----
+;; Depth says where you are, tension says what is happening. tension 0
+;; reproduces the pre-tension output exactly: it takes no extra rng draws.
+
+(defn derive-dungeon
+  "Deeper is darker, slower, thicker. Tension raises tempo, fades a low pulse
+  track in, sours the harmony, and thins the calm layers."
+  [seed depth tension]
+  (let [d (double depth)
+        t (clamp01 tension)
+        s (seed-state seed depth)
+        [s bpm-jitter] (draw-n s 5)
+        [_ root-off]   (draw-pick s root-offsets)]
+    {:mood         :dungeon
+     :seed         seed
+     :bpm          (+ (max 46.0 (- 66.0 (* 3.0 d))) (double bpm-jitter) (* 30.0 t))
+     :root         (+ (- 57 depth) root-off)
+     :scale        (scale-for scales-by-darkness depth)
+     :drone-gain   (min 0.9 (+ 0.55 (* 0.06 d)))
+     :fifth-gain   (+ (min 0.7 (* 0.2 d)) (* 0.25 t))
+     :pad-density  (* (- 0.6 (* 0.05 d)) (- 1.0 (* 0.6 t)))
+     :bell-density (* (max 0.04 (- 0.16 (* 0.02 d))) (- 1.0 (* 0.5 t)))
+     :air-gain     (+ (min 0.6 (+ 0.25 (* 0.05 d))) (* 0.1 t))
+     :pulse-gain   t
+     :fifth-offset (tense-offset -5 t) ; perfect fifth above the low drone
+     :bell-lift    0
+     :lead         (pick-lead seed dungeon-leads)}))
+
+(defn derive-overworld
+  "The bright mirror: elevation raises and opens (mixolydian -> major ->
+  lydian, higher root, denser lifted bells, breeze instead of rumble).
+  Tension works unchanged — brightness collapsing into the same dread."
+  [seed elevation tension]
+  (let [e (double elevation)
+        t (clamp01 tension)
+        s (seed-state seed elevation)
+        [s bpm-jitter] (draw-n s 5)
+        [_ root-off]   (draw-pick s root-offsets)]
+    {:mood         :overworld
+     :seed         seed
+     :bpm          (+ 74.0 (* 3.0 e) (double bpm-jitter) (* 30.0 t))
+     :root         (+ 62 elevation root-off)
+     :scale        (scale-for scales-by-brightness elevation)
+     :drone-gain   (+ 0.25 (* 0.03 e))
+     :fifth-gain   (+ 0.3 (* 0.05 e) (* 0.25 t))
+     :pad-density  (* 0.7 (- 1.0 (* 0.6 t)))
+     :bell-density (* (+ 0.2 (* 0.04 e)) (- 1.0 (* 0.5 t)))
+     :air-gain     (+ 0.15 (* 0.02 e) (* 0.1 t))
+     :pulse-gain   t
+     :fifth-offset (tense-offset -8 t) ; major third above: sunshine
+     :bell-lift    12
+     :lead         (pick-lead seed overworld-leads)}))
+
+(defn derive-mood
+  "Derive with the mood named explicitly. This is the real entry point; the
+  signed-depth sugar below cannot reach every state."
+  [mood seed level tension]
+  (if (= mood :overworld)
+    (derive-overworld seed level tension)
+    (derive-dungeon seed level tension)))
+
+(defn derive
+  "Signed-depth sugar, same as the CLI: a negative depth means overworld
+  elevation. Note the blind spot — -0 is 0, so ground-level overworld is not
+  expressible this way. Use derive-mood for it."
+  [seed depth tension]
+  (if (< depth 0)
+    (derive-overworld seed (- depth) tension)
+    (derive-dungeon seed depth tension)))
+
+(defn score-mood!
+  "Push parameters for an explicit mood at the engine."
+  [mood seed level tension]
+  (audio/set-parameters (derive-mood mood seed level tension)))
+
+(defn score!
+  "Push the derived parameters at the engine. Applied at the next pattern
+  boundary, so calling this again mid-playback is a seamless transition —
+  which is what a descend, or a console tweak, actually is."
+  [seed depth tension]
+  (audio/set-parameters (derive seed depth tension)))

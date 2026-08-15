@@ -51,6 +51,56 @@ output. On the web build: `?tension=0..1`.
 Same seed+depth → byte-identical WAV. Output is 44.1 kHz 16-bit stereo with a
 cross-fed delay bus (bells send to it) and a tanh soft-clip master.
 
+## The let-go lane (`lghost/` + `lg/ambience.lg`)
+
+The point of the whole spike was to prove out the lg↔Go audio boundary, and
+this is it: `lghost` embeds let-go, registers the audio surface sketch's
+proposed natives, and hands the engine to an lg script.
+
+```
+go run ./lghost -e '(do (ambience/score-mood! :dungeon 7 5 0.8) (audio/music-start))'
+go run ./lghost -e '(do (ambience/score! 7 4 0.6) (audio/render-wav "out.wav" 20))'
+```
+
+The split follows the sketch: **lg is the control language, Go is the DSP
+engine.** `lg/ambience.lg` owns the `(seed, depth, tension) -> parameters`
+derivation and the hand-tuned option tables — the layer where a game's taste
+lives, evaluated once per pattern. Everything below the map stays in Go,
+because the unit VM runs at 44.1 kHz and lg has no business there; keeping it
+out also keeps the boxed variadic call ABI (advisory #722) off the audio path.
+
+Natives, exactly the sketch's surface plus one:
+
+| native | |
+|---|---|
+| `audio/music-start`, `audio/music-stop` | playback |
+| `audio/set-parameters` | one map, merged over current state, applied at the next pattern boundary |
+| `audio/render-wav` | **spike-only** — how determinism gets checked without a sound card |
+
+The surface is write-only: no native reads audio state back, so console
+noodling can't taint replay determinism. Registering it needed **no changes to
+let-go** — `vm.NewNamespace`, `vm.MustBox` and `rt.RegisterNS` are all
+exported, which is what makes this self-contained.
+
+`lghost/parity_test.go` renders 144 (mood × seed × depth × tension) cases both
+ways and compares parameters field-by-field plus a hash of the PCM. Two things
+it caught, both worth knowing:
+
+- **lg's `*` is overflow-checked** and raises on wraparound, so the seed-mixing
+  multiplies need `unchecked-multiply`. lg also has no unsigned integer type,
+  and the rng takes an *unsigned* remainder — `(mod s m)` on a negative int64
+  silently picks the wrong option from a table. `ambience/umod` does it by
+  splitting the state into its top 63 bits and its low bit.
+- **Go was fusing `x*y + z` into FMA on arm64**, putting derived gains one ULP
+  off the stepwise result — which lg, with separate multiply and add opcodes,
+  cannot reproduce. That made the Go derivation architecture-dependent: the
+  same seed rendered differently on arm64 and amd64. The derivation now writes
+  those products through an explicit `float64(…)` conversion, which the Go spec
+  forbids fusing across. This changed some renders by one ULP versus the
+  `poc/undertone-go-2026-08-15` tag; it is a fix, not a regression. The
+  per-sample VM and `buildPatterns` still contain unfused products and so are
+  still arm64/amd64-divergent — cross-architecture determinism is not claimed.
+
 Also the phase-A datapoint for the glplat audio spike
 (`glplat-sdl3-audio-spike-spec-2026-08-14.md`, phase A decided for Oto): the
 Oto lane — `oto/v3` + purego, no cgo, no runtime dylib — initialized and
