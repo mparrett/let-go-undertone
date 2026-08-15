@@ -1,4 +1,4 @@
-package main
+package engine
 
 import "testing"
 
@@ -69,7 +69,7 @@ func TestLeadLibrary(t *testing.T) {
 	if _, ok := leadLib[p.LeadName]; !ok {
 		t.Fatalf("derive picked an unknown lead %q", p.LeadName)
 	}
-	applyLead(&p, "reed")
+	ApplyLead(&p, "reed")
 	if p.LeadName != "reed" || p.LeadGate != 3 {
 		t.Fatalf("override failed: %q gate %d", p.LeadName, p.LeadGate)
 	}

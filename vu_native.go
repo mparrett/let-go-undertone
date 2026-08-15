@@ -9,6 +9,8 @@ import (
 	"os/signal"
 	"strings"
 	"time"
+
+	"undertone/engine"
 )
 
 const vuWidth = 12
@@ -135,7 +137,7 @@ func tallLines(levels [4]float64, names [4]string, color bool) (string, string) 
 
 // runMeterUI redraws a single carriage-return line of band meters ~30x/s.
 // Never returns; ctrl-c restores the cursor and exits.
-func runMeterUI(s *Synth, desc, style string) {
+func runMeterUI(s *engine.Synth, desc, style string) {
 	fmt.Printf("playing %s — ctrl-c to stop\n", desc)
 	tty := isTTY()
 	if tty {

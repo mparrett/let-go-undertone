@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"syscall/js"
 	"time"
+
+	"undertone/engine"
 )
 
 // runMeterUI publishes band levels to window.__homageMeter ~30x/s for the
 // host page to draw. Never returns. No terminal meters here: wasm_exec's
 // stdout shim buffers until newline, so a \r-redraw line would never flush.
-func runMeterUI(s *Synth, desc, _ string) {
+func runMeterUI(s *engine.Synth, desc, _ string) {
 	fmt.Printf("playing %s\n", desc)
 	go func() {
 		for range time.Tick(33 * time.Millisecond) {
