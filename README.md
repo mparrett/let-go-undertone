@@ -25,8 +25,15 @@ proposes for `audio/set-parameters`
 ```
 go run . -play                        # live, endless, via oto
 go run . -play -depth 5               # deeper: darker, slower, thicker
+go run . -play -depth 5 -tension 1    # danger: faster, pulse in, harmony sours
 go run . -wav out.wav -depth 2        # deterministic offline render
 ```
+
+Tension (0..1) is the second game-state axis: depth says *where you are*,
+tension says *what's happening*. It raises tempo, fades in a low pulse
+track, slides the second drone from fifth to tritone to minor ninth, and
+thins the calm layers. `tension 0` is byte-identical to the pre-tension
+output. On the web build: `?tension=0..1`.
 
 Same seed+depth → byte-identical WAV. Output is 44.1 kHz 16-bit stereo with a
 cross-fed delay bus (bells send to it) and a tanh soft-clip master.

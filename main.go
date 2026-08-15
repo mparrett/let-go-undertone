@@ -193,6 +193,14 @@ var bell = Patch{
 	{opOut, [4]float64{0.5, 0.6}},
 }
 
+// tension pulse: a soft swept-sine tom, descendant of the techno kick
+var pulse = Patch{
+	{opEnv, [4]float64{0.002, 0.15, 0, 0.08}},
+	{opOsc, [4]float64{0, shpSine, 18, 0.05}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.7, 0.5}},
+}
+
 var air = Patch{
 	{opEnv, [4]float64{2.5, 2.5, 0.4, 3.5}},
 	{opOsc, [4]float64{0, shpNoise, 0, 1}},
@@ -217,6 +225,8 @@ type Params struct {
 	PadDensity  float64
 	BellDensity float64
 	AirGain     float64
+	PulseGain   float64 // tension pulse track level (0 = silent)
+	FifthOffset int     // second drone's interval below the chord; slides dissonant with tension
 	Seed        uint64
 }
 
@@ -226,22 +236,36 @@ var scalesByDarkness = [][]int{
 	{0, 1, 3, 5, 7, 8, 10}, // phrygian
 }
 
-func DeriveParams(seed uint64, depth int) Params {
+// DeriveParams maps game state to music. Depth darkens (where you are);
+// tension 0..1 agitates (what's happening): tempo up, pulse in, the second
+// drone slides fifth -> tritone -> minor ninth, calm layers thin out.
+// tension 0 reproduces the pre-tension output exactly (no extra rng draws).
+func DeriveParams(seed uint64, depth int, tension float64) Params {
 	r := rng{seed ^ uint64(depth)*0x9e3779b97f4a7c15 | 1}
 	d := float64(depth)
+	t := math.Max(0, math.Min(1, tension))
 	darkness := depth / 2
 	if darkness >= len(scalesByDarkness) {
 		darkness = len(scalesByDarkness) - 1
 	}
+	fifth := -5 // perfect fifth above the low drone
+	switch {
+	case t >= 0.75:
+		fifth = -11 // minor ninth territory: dread
+	case t >= 0.4:
+		fifth = -6 // tritone
+	}
 	return Params{
-		BPM:         math.Max(46, 66-3*d) + float64(r.n(5)),
+		BPM:         math.Max(46, 66-3*d) + float64(r.n(5)) + 30*t,
 		Root:        57 - depth + []int{-2, 0, 0, 3}[r.n(4)],
 		Scale:       scalesByDarkness[darkness],
 		DroneGain:   math.Min(0.9, 0.55+0.06*d),
-		FifthGain:   math.Min(0.7, 0.2*d),
-		PadDensity:  0.6 - 0.05*d,
-		BellDensity: math.Max(0.04, 0.16-0.02*d),
-		AirGain:     math.Min(0.6, 0.25+0.05*d),
+		FifthGain:   math.Min(0.7, 0.2*d) + 0.25*t,
+		PadDensity:  (0.6 - 0.05*d) * (1 - 0.6*t),
+		BellDensity: math.Max(0.04, 0.16-0.02*d) * (1 - 0.5*t),
+		AirGain:     math.Min(0.6, 0.25+0.05*d) + 0.1*t,
+		PulseGain:   t,
+		FifthOffset: fifth,
 		Seed:        seed,
 	}
 }
@@ -260,7 +284,7 @@ func (r *rng) f() float64  { return float64(r.next()>>11) / (1 << 53) }
 func (r *rng) n(m int) int { return int(r.next() % uint64(m)) }
 
 const rows = 16
-const nTracks = 5 // drone, fifth, pad, bell, air
+const nTracks = 6 // drone, fifth, pad, bell, air, pulse
 
 type trackRow struct {
 	note     int
@@ -281,7 +305,7 @@ func buildPatterns(p Params, pat int) [nTracks][rows]trackRow {
 	if p.FifthGain > 0.01 {
 		// pad patch (sine pair), not the saw drone: the fifth should
 		// thicken with depth, not brighten
-		out[1][0] = trackRow{chord - 5, p.FifthGain, rows, pad}
+		out[1][0] = trackRow{chord + p.FifthOffset, p.FifthGain, rows, pad}
 	}
 	for _, row := range []int{0, 8} {
 		if r.f() < p.PadDensity {
@@ -299,6 +323,26 @@ func buildPatterns(p Params, pat int) [nTracks][rows]trackRow {
 	}
 	if pat%2 == 0 {
 		out[4][0] = trackRow{45, p.AirGain, 10, air}
+	}
+	// tension pulse: heartbeat on 0/8, agitation fills as tension rises.
+	// Guarded so tension 0 draws no rng and leaves the stream untouched.
+	if p.PulseGain > 0.01 {
+		note := chord - 24
+		g := 0.35 + 0.45*p.PulseGain
+		out[5][0] = trackRow{note, g, 1, pulse}
+		out[5][8] = trackRow{note, g, 1, pulse}
+		for _, row := range []int{4, 12} {
+			if r.f() < p.PulseGain {
+				out[5][row] = trackRow{note, g * 0.8, 1, pulse}
+			}
+		}
+		if p.PulseGain > 0.7 {
+			for _, row := range []int{6, 14} {
+				if r.f() < (p.PulseGain-0.7)*2 {
+					out[5][row] = trackRow{note + 12, g * 0.5, 1, pulse}
+				}
+			}
+		}
 	}
 	return out
 }
@@ -478,12 +522,13 @@ func main() {
 	dur := flag.Float64("dur", 48, "WAV duration seconds")
 	seed := flag.Uint64("seed", 1, "level seed")
 	depth := flag.Int("depth", 0, "dungeon depth: deeper = darker, slower, thicker")
+	tension := flag.Float64("tension", 0, "0..1: tempo up, pulse in, harmony sours")
 	vu := flag.String("vu", "bars", "meter style: bars | compact (one cell per band) | tall (two cells, 2x range)")
 	flag.Parse()
 
-	p := DeriveParams(*seed, *depth)
+	p := DeriveParams(*seed, *depth, *tension)
 	s := NewSynth(p)
-	desc := fmt.Sprintf("seed=%d depth=%d bpm=%.0f root=%d", *seed, *depth, p.BPM, p.Root)
+	desc := fmt.Sprintf("seed=%d depth=%d tension=%.2f bpm=%.0f root=%d", *seed, *depth, *tension, p.BPM, p.Root)
 	switch {
 	case *wav != "":
 		if err := writeWAV(*wav, s, *dur); err != nil {

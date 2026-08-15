@@ -26,7 +26,8 @@
     <div class="band"><div class="meter"><div class="curtain"></div><div class="peak"></div></div><div class="lbl">hi</div></div>
   </div>
   <p id="status">loading wasm…</p>
-  <p>depth via <a href="?depth=0">?depth=0</a> … <a href="?depth=5">?depth=5</a>, seed via <code>?seed=N</code></p>
+  <p>depth via <a href="?depth=0">?depth=0</a> … <a href="?depth=5">?depth=5</a>, seed via <code>?seed=N</code>,
+     tension via <a href="?depth=3&tension=1">?tension=0..1</a></p>
 </div>
 <script src="wasm_exec.js"></script>
 <script>
@@ -47,20 +48,21 @@
   const q = new URLSearchParams(location.search);
   const depth = q.get("depth") ?? "0";
   const seed = q.get("seed") ?? "1";
+  const tension = q.get("tension") ?? "0";
   const status = document.getElementById("status");
 
   const go = new Go();
-  go.argv = ["homage", "-play", "-depth", depth, "-seed", seed];
+  go.argv = ["homage", "-play", "-depth", depth, "-seed", seed, "-tension", tension];
   WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject)
     .then((r) => {
-      status.textContent = `depth ${depth}, seed ${seed} — click anywhere to start`;
+      status.textContent = `depth ${depth}, seed ${seed}, tension ${tension} — click anywhere to start`;
       go.run(r.instance);
     })
     .catch((e) => { status.textContent = "wasm failed: " + e; });
 
   const resume = () => {
     window.__audioCtxs.forEach((c) => c.resume());
-    status.textContent = `playing — depth ${depth}, seed ${seed}`;
+    status.textContent = `playing — depth ${depth}, seed ${seed}, tension ${tension}`;
   };
   addEventListener("click", resume);
   addEventListener("keydown", resume);
