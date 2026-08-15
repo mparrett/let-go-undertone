@@ -81,3 +81,21 @@ func TestLeadLibrary(t *testing.T) {
 		t.Fatalf("12 seeds should audition at least 3 leads, got %v", seen)
 	}
 }
+
+func TestSetParametersAppliesAtPatternBoundary(t *testing.T) {
+	s := NewSynth(DeriveDungeon(1, 3, 0))
+	buf := make([]byte, s.samplesPerRow*4*4) // advance 4 rows into pattern 0
+	s.Read(buf)
+	before := s.params.BPM
+	next := DeriveDungeon(1, 3, 1)
+	s.SetParameters(next)
+	if s.params.BPM != before {
+		t.Fatal("staged parameters must not apply mid-pattern")
+	}
+	rest := make([]byte, (s.samplesPerRow*(rows-4)+s.samplesPerRow)*4)
+	s.Read(rest) // cross the pattern boundary
+	if s.params.BPM != next.BPM {
+		t.Fatalf("staged parameters should apply at the boundary: got bpm %v, want %v",
+			s.params.BPM, next.BPM)
+	}
+}

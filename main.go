@@ -4,13 +4,18 @@
 // run by a tiny per-sample VM, a tracker-style sequencer drives them, and
 // the whole track is derived deterministically from a seed.
 //
-// Register: roguelike ambience. Parameters derive from (seed, depth) —
-// deeper is darker, slower, thicker — and SetParameters applies a new map
-// at the next pattern boundary, the same transactional semantics the
-// glplat audio surface sketch proposes for audio/set-parameters.
+// Register: roguelike ambience. Parameters derive from game state —
+// mood (dungeon/overworld), level (depth darkens, elevation brightens),
+// tension (tempo up, pulse in, harmony sours), and the seed, which also
+// picks the lead instrument from a mood-weighted library. SetParameters
+// applies a new map at the next pattern boundary, the same transactional
+// semantics the glplat audio surface sketch proposes for
+// audio/set-parameters.
 //
-//	go run . -play                       # live, endless, via oto
-//	go run . -wav out.wav -depth 4       # deterministic offline render
+//	go run . -play                          # live, endless, via oto
+//	go run . -play -depth 5 -tension 0.8    # the abyss, something coming
+//	go run . -play -mood overworld -depth 3 # bright mirror
+//	go run . -wav out.wav -depth 4 -lead pluck  # deterministic render
 package main
 
 import (
