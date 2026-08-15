@@ -5,19 +5,25 @@
   body { background: #111; color: #cbd; font: 16px/1.5 monospace; display: grid; place-items: center; min-height: 100vh; margin: 0; }
   #panel { text-align: center; }
   #status { color: #7a8; }
+  h1 { margin-bottom: 2px; }
+  #sub { color: #567; font-size: 13px; margin-top: 0; }
   a { color: #9ab; }
-  #vu { display: flex; gap: 14px; justify-content: center; align-items: flex-end; height: 120px; margin: 24px 0 8px; }
-  #vu .band { width: 34px; display: flex; flex-direction: column; justify-content: flex-end; height: 100%; }
-  #vu .bar { background: linear-gradient(#7a8, #365); height: 0%; transition: height 40ms linear; }
-  #vu .lbl { color: #678; margin-top: 6px; font-size: 12px; }
+  #vu { display: flex; gap: 14px; justify-content: center; height: 140px; margin: 24px 0 8px; }
+  #vu .band { width: 34px; display: flex; flex-direction: column; }
+  /* fixed green/yellow/red zones on the track; the curtain covers the unfilled top */
+  #vu .meter { position: relative; flex: 1; background: linear-gradient(to top, #365 0%, #7a8 60%, #ca5 60% 83%, #c55 83% 100%); }
+  #vu .curtain { position: absolute; top: 0; left: 0; right: 0; height: 100%; background: #111; transition: height 40ms linear; }
+  #vu .peak { position: absolute; left: 0; right: 0; height: 2px; background: #dcb; bottom: 0%; }
+  #vu .lbl { color: #678; margin-top: 6px; font-size: 12px; text-align: center; }
 </style>
 <div id="panel">
   <h1>undertone</h1>
+  <p id="sub">generative dungeon ambience from (seed, depth)</p>
   <div id="vu">
-    <div class="band"><div class="bar"></div><div class="lbl">sub</div></div>
-    <div class="band"><div class="bar"></div><div class="lbl">low</div></div>
-    <div class="band"><div class="bar"></div><div class="lbl">mid</div></div>
-    <div class="band"><div class="bar"></div><div class="lbl">hi</div></div>
+    <div class="band"><div class="meter"><div class="curtain"></div><div class="peak"></div></div><div class="lbl">sub</div></div>
+    <div class="band"><div class="meter"><div class="curtain"></div><div class="peak"></div></div><div class="lbl">low</div></div>
+    <div class="band"><div class="meter"><div class="curtain"></div><div class="peak"></div></div><div class="lbl">mid</div></div>
+    <div class="band"><div class="meter"><div class="curtain"></div><div class="peak"></div></div><div class="lbl">hi</div></div>
   </div>
   <p id="status">loading wasm…</p>
   <p>depth via <a href="?depth=0">?depth=0</a> … <a href="?depth=5">?depth=5</a>, seed via <code>?seed=N</code></p>
@@ -60,11 +66,18 @@
   addEventListener("keydown", resume);
 
   // VU bars from the Go-side meter (window.__homageMeter, ~30 Hz);
-  // same bands and ballistics as the TUI meter.
-  const bars = document.querySelectorAll("#vu .bar");
+  // same bands, ballistics, and peak-hold decay as the TUI meter.
+  const curtains = document.querySelectorAll("#vu .curtain");
+  const peakEls = document.querySelectorAll("#vu .peak");
+  const peaks = [0, 0, 0, 0];
   (function draw() {
     const m = window.__homageMeter;
-    if (m) bars.forEach((b, i) => { b.style.height = Math.min(100, Math.pow(m[i], 0.4) * 100) + "%"; });
+    if (m) curtains.forEach((c, i) => {
+      const pct = Math.min(100, Math.pow(m[i], 0.4) * 100);
+      c.style.height = (100 - pct) + "%";
+      peaks[i] = Math.max(m[i], peaks[i] * 0.985);
+      peakEls[i].style.bottom = Math.min(99, Math.pow(peaks[i], 0.4) * 100) + "%";
+    });
     requestAnimationFrame(draw);
   })();
 </script>
