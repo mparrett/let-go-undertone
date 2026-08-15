@@ -63,3 +63,21 @@ func TestOverworldIsBrighter(t *testing.T) {
 		t.Fatal("overworld tension should reach the same dread interval")
 	}
 }
+
+func TestLeadLibrary(t *testing.T) {
+	p := DeriveDungeon(1, 3, 0)
+	if _, ok := leadLib[p.LeadName]; !ok {
+		t.Fatalf("derive picked an unknown lead %q", p.LeadName)
+	}
+	applyLead(&p, "reed")
+	if p.LeadName != "reed" || p.LeadGate != 3 {
+		t.Fatalf("override failed: %q gate %d", p.LeadName, p.LeadGate)
+	}
+	seen := map[string]bool{}
+	for seed := uint64(1); seed <= 12; seed++ {
+		seen[DeriveDungeon(seed, 3, 0).LeadName] = true
+	}
+	if len(seen) < 3 {
+		t.Fatalf("12 seeds should audition at least 3 leads, got %v", seen)
+	}
+}

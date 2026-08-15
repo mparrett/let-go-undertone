@@ -193,6 +193,61 @@ var bell = Patch{
 	{opOut, [4]float64{0.5, 0.6}},
 }
 
+// ---- lead instruments (the bell slot) ----
+// Different species, same opcodes: inharmonic partials read as metal,
+// ring-mod as clang, filtered pulse as wood/breath.
+
+// chime: three sine partials at non-integer ratios (1, ~2.29, ~3.01)
+var chime = Patch{
+	{opEnv, [4]float64{0.002, 1.6, 0, 0.6}},
+	{opOsc, [4]float64{0, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opSend, [4]float64{0.6, 0, 0, 0}},
+	{opOut, [4]float64{0.35, 0.6}},
+	{opEnv, [4]float64{0.002, 1.1, 0, 0.5}},
+	{opOsc, [4]float64{14.35, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.18, 0.4}},
+	{opEnv, [4]float64{0.002, 0.7, 0, 0.4}},
+	{opOsc, [4]float64{19.08, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.1, 0.65}},
+}
+
+// clang: ring-modulated sine pair (env x osc x osc) — eerie metal
+var clang = Patch{
+	{opEnv, [4]float64{0.002, 1.2, 0, 0.5}},
+	{opOsc, [4]float64{0, shpSine, 0, 1}},
+	{opOsc, [4]float64{16.9, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opMul, [4]float64{}},
+	{opSend, [4]float64{0.5, 0, 0, 0}},
+	{opOut, [4]float64{0.4, 0.55}},
+}
+
+// kalimba: struck sine with a brief bright partial — woody
+var kalimba = Patch{
+	{opEnv, [4]float64{0.001, 0.35, 0, 0.15}},
+	{opOsc, [4]float64{0, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opSend, [4]float64{0.4, 0, 0, 0}},
+	{opOut, [4]float64{0.45, 0.55}},
+	{opEnv, [4]float64{0.001, 0.08, 0, 0.05}},
+	{opOsc, [4]float64{19, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.2, 0.45}},
+}
+
+// reed: filtered pulse, slow attack, sustained — breath, needs a longer gate
+var reed = Patch{
+	{opEnv, [4]float64{0.15, 0.5, 0.5, 0.25}},
+	{opOsc, [4]float64{0, shpPulse, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{900, 0, 0, 0}},
+	{opSend, [4]float64{0.3, 0, 0, 0}},
+	{opOut, [4]float64{0.22, 0.5}},
+}
+
 // overworld drone: sine pair — a bed, not a weight
 var bed = Patch{
 	{opEnv, [4]float64{3, 2, 1, 4}},
@@ -250,8 +305,43 @@ type Params struct {
 	PulseGain   float64 // tension pulse track level (0 = silent)
 	FifthOffset int     // second drone's interval below the chord; slides dissonant with tension
 	BellLift    int     // semitones added to bell notes (overworld sparkle register)
+	LeadName    string  // which instrument holds the bell slot
+	LeadGate    int     // gate rows for the lead (sustained leads want > 1)
 	Palette     Palette // the mood's patch bank
 	Seed        uint64
+}
+
+// leadDef is one entry in the lead-instrument library.
+type leadDef struct {
+	name  string
+	patch Patch
+	gate  int
+}
+
+var leadLib = map[string]leadDef{
+	"bell":    {"bell", bell, 1},
+	"chime":   {"chime", chime, 1},
+	"clang":   {"clang", clang, 1},
+	"kalimba": {"kalimba", kalimba, 1},
+	"reed":    {"reed", reed, 3},
+}
+
+// mood-weighted audition lists; the seed picks (kaiju trick applied to
+// timbre: two seeds differ in instrument, not just notes)
+var dungeonLeads = []string{"bell", "chime", "chime", "clang", "kalimba"}
+var overworldLeads = []string{"bell", "bell", "kalimba", "kalimba", "reed"}
+
+// pickLead draws from a separate rng stream so the pattern content for a
+// given seed is unchanged — only the instrument varies.
+func pickLead(p *Params, names []string) {
+	r := rng{p.Seed*0x9e3779b97f4a7c15 + 0x1eadf00d | 1}
+	applyLead(p, names[r.n(len(names))])
+}
+
+func applyLead(p *Params, name string) {
+	if d, ok := leadLib[name]; ok {
+		p.LeadName, p.LeadGate, p.Palette.Bell = d.name, d.gate, d.patch
+	}
 }
 
 // Palette is a mood's patch bank: mood = patches + a point in parameter space.
@@ -298,7 +388,7 @@ func DeriveDungeon(seed uint64, depth int, tension float64) Params {
 	if darkness >= len(scalesByDarkness) {
 		darkness = len(scalesByDarkness) - 1
 	}
-	return Params{
+	p := Params{
 		BPM:         math.Max(46, 66-3*d) + float64(r.n(5)) + 30*t,
 		Root:        57 - depth + []int{-2, 0, 0, 3}[r.n(4)],
 		Scale:       scalesByDarkness[darkness],
@@ -312,6 +402,8 @@ func DeriveDungeon(seed uint64, depth int, tension float64) Params {
 		Palette:     dungeonPalette,
 		Seed:        seed,
 	}
+	pickLead(&p, dungeonLeads)
+	return p
 }
 
 // DeriveOverworld is the bright mirror: elevation raises and opens
@@ -326,7 +418,7 @@ func DeriveOverworld(seed uint64, elevation int, tension float64) Params {
 	if brightness >= len(scalesByBrightness) {
 		brightness = len(scalesByBrightness) - 1
 	}
-	return Params{
+	p := Params{
 		BPM:         74 + 3*e + float64(r.n(5)) + 30*t,
 		Root:        62 + elevation + []int{-2, 0, 0, 3}[r.n(4)],
 		Scale:       scalesByBrightness[brightness],
@@ -341,6 +433,8 @@ func DeriveOverworld(seed uint64, elevation int, tension float64) Params {
 		Palette:     overworldPalette,
 		Seed:        seed,
 	}
+	pickLead(&p, overworldLeads)
+	return p
 }
 
 // ---- generative sequencer ----
@@ -391,7 +485,7 @@ func buildPatterns(p Params, pat int) [nTracks][rows]trackRow {
 		if r.f() < p.BellDensity {
 			deg += r.n(5) - 2
 			deg = max(3, min(deg, 17))
-			out[3][i] = trackRow{chord + 12*(deg/7) + p.Scale[deg%7] + p.BellLift, 0.55, 1, p.Palette.Bell}
+			out[3][i] = trackRow{chord + 12*(deg/7) + p.Scale[deg%7] + p.BellLift, 0.55, p.LeadGate, p.Palette.Bell}
 		}
 	}
 	if pat%2 == 0 {
@@ -596,6 +690,7 @@ func main() {
 	seed := flag.Uint64("seed", 1, "level seed")
 	depth := flag.Int("depth", 0, "dungeon depth (negative = overworld elevation)")
 	mood := flag.String("mood", "dungeon", "dungeon | overworld (elevation = depth)")
+	lead := flag.String("lead", "", "lead instrument: bell|chime|clang|kalimba|reed (default: seed picks)")
 	tension := flag.Float64("tension", 0, "0..1: tempo up, pulse in, harmony sours")
 	vu := flag.String("vu", "bars", "meter style: bars | compact (one cell per band) | tall (two cells, 2x range)")
 	flag.Parse()
@@ -611,8 +706,11 @@ func main() {
 	default:
 		p = DeriveDungeon(*seed, level, *tension)
 	}
+	if *lead != "" {
+		applyLead(&p, *lead)
+	}
 	s := NewSynth(p)
-	desc := fmt.Sprintf("mood=%s seed=%d level=%d tension=%.2f bpm=%.0f root=%d", *mood, *seed, level, *tension, p.BPM, p.Root)
+	desc := fmt.Sprintf("mood=%s seed=%d level=%d tension=%.2f lead=%s bpm=%.0f root=%d", *mood, *seed, level, *tension, p.LeadName, p.BPM, p.Root)
 	switch {
 	case *wav != "":
 		if err := writeWAV(*wav, s, *dur); err != nil {
