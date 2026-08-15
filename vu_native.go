@@ -73,21 +73,13 @@ var vuVert = []string{"", "\u2581", "\u2582", "\u2583", "\u2584", "\u2585", "\u2
 // vertical eighths at two ANSI intensities, interleaved (dim \u2581, bright \u2581,
 // dim \u2582, ...). Unicode has no hashed eighths (\u2591\u2592\u2593 are full-cell only),
 // so intensity supplies the extra bit. No-color terminals degrade to 9 levels.
-func compactCell(b *strings.Builder, v float64, color bool) {
-	idx := int(math.Min(math.Pow(v, 0.4)*16, 16) + 0.5)
-	if idx == 0 {
+func renderCell(b *strings.Builder, idx int, zone string, color bool) {
+	if idx <= 0 {
 		b.WriteString(" ")
 		return
 	}
 	if color {
-		switch {
-		case idx >= 15:
-			b.WriteString("\x1b[31m")
-		case idx >= 11:
-			b.WriteString("\x1b[33m")
-		default:
-			b.WriteString("\x1b[32m")
-		}
+		b.WriteString(zone)
 		if idx%2 == 1 {
 			b.WriteString("\x1b[2m")
 		}
@@ -96,6 +88,49 @@ func compactCell(b *strings.Builder, v float64, color bool) {
 	if color {
 		b.WriteString("\x1b[0m")
 	}
+}
+
+func compactCell(b *strings.Builder, v float64, color bool) {
+	idx := int(math.Min(math.Pow(v, 0.4)*16, 16) + 0.5)
+	zone := "\x1b[32m"
+	switch {
+	case idx >= 15:
+		zone = "\x1b[31m"
+	case idx >= 11:
+		zone = "\x1b[33m"
+	}
+	renderCell(b, idx, zone, color)
+}
+
+// tallLines renders each band as two stacked cells: 33 glyph levels (2 x 16
+// eighth-x-intensity steps + blank), labels on the bottom line.
+func tallLines(levels [4]float64, names [4]string, color bool) (string, string) {
+	var top, bot strings.Builder
+	top.WriteString(" ")
+	bot.WriteString(" ")
+	for i, v := range levels {
+		idx := int(math.Min(math.Pow(v, 0.4)*32, 32) + 0.5)
+		zone := "\x1b[32m"
+		switch {
+		case idx >= 29:
+			zone = "\x1b[31m"
+		case idx >= 22:
+			zone = "\x1b[33m"
+		}
+		top.WriteString(strings.Repeat(" ", len(names[i])+1))
+		renderCell(&top, idx-16, zone, color)
+		top.WriteString("  ")
+		if color {
+			bot.WriteString("\x1b[2m")
+		}
+		fmt.Fprintf(&bot, "%s ", names[i])
+		if color {
+			bot.WriteString("\x1b[0m")
+		}
+		renderCell(&bot, min(idx, 16), zone, color)
+		bot.WriteString("  ")
+	}
+	return top.String(), bot.String()
 }
 
 // runMeterUI redraws a single carriage-return line of band meters ~30x/s.
@@ -114,6 +149,21 @@ func runMeterUI(s *Synth, desc, style string) {
 		}()
 	}
 	names := [4]string{"sub", "low", "mid", "hi"}
+	if style == "tall" && tty {
+		first := true
+		for range time.Tick(33 * time.Millisecond) {
+			top, bot := tallLines(s.Levels(), names, true)
+			if first {
+				fmt.Print(top + "\n" + bot)
+				first = false
+				continue
+			}
+			fmt.Print("\x1b[1A\r" + top + "\x1b[K\x1b[1B\r" + bot + "\x1b[K")
+		}
+	}
+	if style == "tall" {
+		style = "compact" // no cursor movement in a pipe
+	}
 	var peaks [4]float64
 	for range time.Tick(33 * time.Millisecond) {
 		var b strings.Builder

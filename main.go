@@ -478,7 +478,7 @@ func main() {
 	dur := flag.Float64("dur", 48, "WAV duration seconds")
 	seed := flag.Uint64("seed", 1, "level seed")
 	depth := flag.Int("depth", 0, "dungeon depth: deeper = darker, slower, thicker")
-	vu := flag.String("vu", "bars", "meter style: bars | compact (one cell per band)")
+	vu := flag.String("vu", "bars", "meter style: bars | compact (one cell per band) | tall (two cells, 2x range)")
 	flag.Parse()
 
 	p := DeriveParams(*seed, *depth)
