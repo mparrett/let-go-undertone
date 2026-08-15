@@ -1,0 +1,3 @@
+# Build outputs (~3 MB each); rebuild with `go build -o undertone .`
+/undertone
+/sointu-homage
