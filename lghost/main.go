@@ -29,6 +29,8 @@ import (
 	"io"
 	"os"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/ebitengine/oto/v3"
 	"github.com/nooga/let-go/pkg/api"
@@ -121,6 +123,15 @@ func (m *music) start() vm.Value {
 	return vm.NIL
 }
 
+// started reports whether playback is live. Go-side only, deliberately not a
+// native: a guest-visible (audio/playing?) would let game logic branch on audio
+// state, which is exactly what the write-only rule forbids.
+func (m *music) started() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.player != nil
+}
+
 func (m *music) stop() vm.Value {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -199,22 +210,46 @@ func ints(m *vm.PersistentMap, k string) ([]int, bool) {
 	return out, true
 }
 
-// install registers the audio namespace. An embedder can do this with no
-// changes to let-go itself, which is what makes this a self-contained spike:
-// vm.NewNamespace + vm.MustBox + rt.RegisterNS are all exported.
+// current is the music instance the audio natives act on. It is indirect
+// because namespace registration must happen exactly once per process: a
+// second vm.NewNamespace("audio") does replace the registry entry, but lg code
+// loaded against the first one keeps referring to the first one's Vars, so a
+// re-register silently leaves earlier callers writing to the abandoned
+// instance. Swapping the target instead keeps every caller pointed at the
+// live one.
+var (
+	current     atomic.Pointer[music]
+	installOnce sync.Once
+)
+
+// install points the audio namespace at m, registering it on first call. An
+// embedder can do this with no changes to let-go itself, which is what makes
+// this a self-contained spike: vm.NewNamespace + vm.MustBox + rt.RegisterNS
+// are all exported.
 func install(m *music) {
-	ns := vm.NewNamespace("audio")
-	ns.Def("set-parameters", vm.MustBox(m.setParameters))
-	ns.Def("music-start", vm.MustBox(m.start))
-	ns.Def("music-stop", vm.MustBox(m.stop))
-	ns.Def("render-wav", vm.MustBox(m.renderWAV)) // spike-only
-	rt.RegisterNS(ns)
+	current.Store(m)
+	installOnce.Do(func() {
+		ns := vm.NewNamespace("audio")
+		ns.Def("set-parameters", vm.MustBox(func(v vm.Value) vm.Value {
+			return current.Load().setParameters(v)
+		}))
+		ns.Def("music-start", vm.MustBox(func() vm.Value { return current.Load().start() }))
+		ns.Def("music-stop", vm.MustBox(func() vm.Value { return current.Load().stop() }))
+		// spike-only
+		ns.Def("render-wav", vm.MustBox(func(path string, secs float64) vm.Value {
+			return current.Load().renderWAV(path, secs)
+		}))
+		rt.RegisterNS(ns)
+	})
 }
 
 func main() {
 	loadPath := flag.String("load-path", "lg", "directory holding the lg namespaces")
 	nsName := flag.String("ns", "ambience", "lg namespace to require")
 	expr := flag.String("e", "", "lg expression to run after the namespace loads")
+	demo := flag.Bool("demo", false, "walk demo.lg's scripted descent-and-fight arc")
+	dry := flag.Bool("dry", false, "with -demo: print the tension trace, make no sound")
+	turnMS := flag.Int("turn-ms", 1500, "with -demo: real milliseconds per game turn")
 	flag.Parse()
 
 	// The base params supply the patch palette and a lead default; the script
@@ -233,6 +268,13 @@ func main() {
 	if _, err := c.Run("(require '" + *nsName + ")"); err != nil {
 		fmt.Fprintln(os.Stderr, "lg:", err)
 		os.Exit(1)
+	}
+	if *demo {
+		if err := runDemo(c, m, *dry, time.Duration(*turnMS)*time.Millisecond); err != nil {
+			fmt.Fprintln(os.Stderr, "demo:", err)
+			os.Exit(1)
+		}
+		return
 	}
 	if *expr != "" {
 		v, err := c.Run(*expr)

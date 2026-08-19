@@ -1,0 +1,53 @@
+;; demo.lg — a scripted descent-and-fight arc, as data.
+;;
+;; Exists so the tension model can be heard rather than only asserted. The
+;; host walks this vector one entry per "turn", asks music.lg for the target,
+;; runs the envelope, and pushes the result at the engine — which is exactly
+;; the flow xsofy will have, with the world coming from the game instead of
+;; from a literal here.
+
+(ns demo
+  (:require [music]))
+
+(def ^:private full {:hp 20 :max-hp 20})
+
+(defn- world
+  "A world at a given hp with n engaged hostiles in view."
+  [depth hp n]
+  (let [poss (map (fn [i] [i i]) (range n))
+        ids  (map (fn [i] (keyword (str "m" i))) (range n))]
+    {:seed-input 42
+     :depth depth
+     :fov (set poss)
+     :entities (merge {:player {:id :player :body {:hp hp :max-hp 20}}}
+                      (zipmap ids (map (fn [id pos] {:id id :ai {:state :hunt} :pos pos})
+                                       ids poss)))}))
+
+;; [label world] per turn. The shape of the arc is the point: a long quiet
+;; stretch, an ambush, a fight that costs real hp, then a recovery that is
+;; audibly slower than the ambush was sudden.
+(def arc
+  [["descending, quiet"        (world 3 20 0)]
+   ["quiet"                    (world 3 20 0)]
+   ["quiet"                    (world 3 20 0)]
+   ["a shape in the dark"      (world 3 20 1)]
+   ["it has seen you"          (world 3 20 2)]
+   ["struck — 15/20"           (world 3 15 2)]
+   ["struck again — 9/20"      (world 3  9 2)]
+   ["three of them now"        (world 3  9 3)]
+   ["badly hurt — 4/20"        (world 3  4 3)]
+   ["one down"                 (world 3  4 2)]
+   ["another down"             (world 3  4 1)]
+   ["last one flees"           (world 3  4 0)]
+   ["alone, still bleeding"    (world 3  4 0)]
+   ["resting"                  (world 3  7 0)]
+   ["resting"                  (world 3 11 0)]
+   ["resting"                  (world 3 15 0)]
+   ["mended"                   (world 3 20 0)]
+   ["quiet again"              (world 3 20 0)]
+   ["descending to 5"          (world 5 20 0)]
+   ["the deep, quiet"          (world 5 20 0)]])
+
+(defn label [i] (first (nth arc i)))
+(defn world-at [i] (second (nth arc i)))
+(defn turns [] (count arc))
