@@ -55,7 +55,9 @@ cross-fed delay bus (bells send to it) and a tanh soft-clip master.
 
 The point of the whole spike was to prove out the lg↔Go audio boundary, and
 this is it: `lghost` embeds let-go, registers the audio surface sketch's
-proposed natives, and hands the engine to an lg script.
+proposed natives, and hands the engine to an lg script. The host side itself
+(the `Music` state, the natives, the demo driver) lives in `./host` so both
+front ends — the native CLI and `./webdemo` — embed the identical surface.
 
 ```
 go run ./lghost -e '(do (ambience/score-mood! :dungeon 7 5 0.8) (audio/music-start))'
@@ -142,6 +144,25 @@ Also the phase-A datapoint for the glplat audio spike
 (`glplat-sdl3-audio-spike-spec-2026-08-14.md`, phase A decided for Oto): the
 Oto lane — `oto/v3` + purego, no cgo, no runtime dylib — initialized and
 streamed a live `io.Reader` on this Mac with zero friction (2026-08-14).
+
+## Browser demo of the lg lane (`webdemo/`)
+
+The full lghost demo — let-go, the lg derivation, one-shots — in the browser:
+
+```
+GOOS=js GOARCH=wasm go build -o webdemo/main.wasm ./webdemo
+cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" webdemo/
+python3 serve.py 8901 webdemo      # binds 0.0.0.0: reachable over LAN/Tailscale
+```
+
+GOOS=js has no filesystem, so the lg sources ride embedded (`lg/embed.go`)
+and load through core's `load-string` instead of the resolver's load path
+(`host.LoadEmbedded`, natively pinned by `host/embed_test.go`). One trap worth
+its comment: **oto's ready channel only closes on a touchend/keyup/mouseup
+that arrives *after* the AudioContext exists**, so the device must be opened
+at page load (blocking in a goroutine) and the play tap doubles as the
+unlocking gesture — opening it inside the tap handler hangs forever, because
+that tap's own touchend has already fired.
 
 ## Browser (Go wasm + oto-js)
 

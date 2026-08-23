@@ -5,7 +5,8 @@
 import http.server, os, sys
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8899
-os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "web"))
+DIR = sys.argv[2] if len(sys.argv) > 2 else "web"
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), DIR))
 
 class H(http.server.SimpleHTTPRequestHandler):
     def end_headers(self):
