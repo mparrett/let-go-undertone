@@ -9,14 +9,17 @@
 // from game state, which happens at human rates and is where a game's taste
 // lives.
 //
-// The natives registered here are the sketch's proposed surface, no more:
+// The natives registered here are the sketch's proposed surface plus the
+// one-shot lane:
 //
 //	audio/music-start            begin streaming
 //	audio/music-stop             stop
 //	audio/set-parameters         one map, merged over current state, applied
 //	                             at the next pattern boundary
+//	audio/trigger                one-shot sfx: a trigger map or a vector of
+//	                             them (from sfx/for-events), fire-and-forget
 //
-// audio/render-wav is a fourth, spike-only: it is how determinism gets checked
+// audio/render-wav is a fifth, spike-only: it is how determinism gets checked
 // without a sound card, not part of the proposed surface.
 //
 //	go run ./lghost -lg lg/ambience.lg -play
@@ -96,6 +99,45 @@ func (m *music) setParameters(v vm.Value) vm.Value {
 
 	if m.synth != nil {
 		m.synth.SetParameters(m.params)
+	}
+	return vm.NIL
+}
+
+// trigger accepts one trigger map or a vector of them (the shape
+// sfx/for-events returns) and stages each as a one-shot. Fire-and-forget by
+// contract: with no synth running (music not started, or a -dry demo) the
+// triggers drop silently, because the write-only rule means nothing upstream
+// may ever learn whether a sound played.
+func (m *music) trigger(v vm.Value) vm.Value {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.synth == nil {
+		return vm.NIL
+	}
+	var maps []*vm.PersistentMap
+	switch t := v.(type) {
+	case *vm.PersistentMap:
+		maps = append(maps, t)
+	case vm.ArrayVector:
+		for _, e := range t {
+			if pm, ok := e.(*vm.PersistentMap); ok {
+				maps = append(maps, pm)
+			}
+		}
+	}
+	for _, lg := range maps {
+		name, ok := kwStr(lg, "shot")
+		if !ok {
+			continue
+		}
+		note, gain, pan, delay := 60, 1.0, 0.5, 0.0
+		integer(lg, "note", &note)
+		flt(lg, "gain", &gain)
+		flt(lg, "pan", &pan)
+		flt(lg, "delay-ms", &delay)
+		var seed int
+		integer(lg, "seed", &seed)
+		m.synth.Trigger(name, note, gain, pan, delay, uint64(seed))
 	}
 	return vm.NIL
 }
@@ -235,6 +277,9 @@ func install(m *music) {
 		}))
 		ns.Def("music-start", vm.MustBox(func() vm.Value { return current.Load().start() }))
 		ns.Def("music-stop", vm.MustBox(func() vm.Value { return current.Load().stop() }))
+		ns.Def("trigger", vm.MustBox(func(v vm.Value) vm.Value {
+			return current.Load().trigger(v)
+		}))
 		// spike-only
 		ns.Def("render-wav", vm.MustBox(func(path string, secs float64) vm.Value {
 			return current.Load().renderWAV(path, secs)

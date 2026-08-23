@@ -75,6 +75,7 @@ Natives, exactly the sketch's surface plus one:
 |---|---|
 | `audio/music-start`, `audio/music-stop` | playback |
 | `audio/set-parameters` | one map, merged over current state, applied at the next pattern boundary |
+| `audio/trigger` | one-shot sfx: a trigger map or vector of them (from `sfx/for-events`), fire-and-forget |
 | `audio/render-wav` | **spike-only** — how determinism gets checked without a sound card |
 
 The surface is write-only: no native reads audio state back, so console
@@ -100,6 +101,42 @@ it caught, both worth knowing:
   `poc/undertone-go-2026-08-15` tag; it is a fix, not a regression. The
   per-sample VM and `buildPatterns` still contain unfused products and so are
   still arm64/amd64-divergent — cross-architecture determinism is not claimed.
+
+## One-shot sfx (`engine/sfx.go` + `lg/sfx.lg`)
+
+The procedural one-shot lane the decoupling assessment called Tier 3, scoped
+to the three sounds that cover most of a roguelike turn: **footstep**,
+**damage hit**, **rune pickup**. Procedural, not samples: near-zero payload,
+free per-event variation, and the same synth VM as the score so one-shots
+share its timbre space.
+
+The split mirrors the music lane. `lg/sfx.lg` is the vocabulary — a pure map
+from event descriptors (`{:kind :combat-hit :dist 3 :dir 0.5}`, i.e. *what
+happened*) to engine trigger maps, with the spatial model (hyperbolic distance
+attenuation, soft-edged pan) applied there. `engine/sfx.go` is the mechanics:
+an 8-voice one-shot pool beside the sequencer (which never sees it — `step()`
+is bounded by `nTracks`), per-voice pan applied outside the patch,
+sample-accurate trigger delay, and a per-trigger `humanize` jitter of envelope
+decays and filter cutoffs so a footstep every turn doesn't machine-gun.
+
+Two design points worth keeping:
+
+- **The pickup chime is pitched from the floor's own scale** via the same
+  derivation the music uses, so it is in key with the score by construction —
+  the trick a sample library can't do.
+- **`audio/trigger` is fire-and-forget and write-only**, like the rest of the
+  surface: with no synth running the triggers drop silently, and nothing
+  upstream can learn whether a sound played. Descriptors name events, not
+  sounds, so procedural-vs-samples stays swappable behind this seam.
+
+`go run ./lghost -demo` walks the scripted arc with the one-shots riding the
+same per-turn boundary as the parameters (`-dry` prints the trace, including
+a per-turn cue tag, without sound). `engine/sfx_test.go` pins the lane's
+contract — a gain-0 one-shot leaves the music render byte-identical, triggers
+are deterministic per seed, voices die (the env sustain-stage trap), and the
+lg-thread-vs-audio-callback locking survives `-race`; `lghost/sfx_lg_test.go`
+pins the vocabulary (gain hierarchy, attenuation, pan direction, in-scale
+pickup, salt determinism).
 
 Also the phase-A datapoint for the glplat audio spike
 (`glplat-sdl3-audio-spike-spec-2026-08-14.md`, phase A decided for Oto): the

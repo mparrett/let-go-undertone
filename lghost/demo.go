@@ -59,9 +59,20 @@ func runDemo(c *api.LetGo, m *music, dry bool, turnDur time.Duration) error {
 			"(audio/set-parameters (music/params-for (demo/world-at %d) %v))", i, tension)); err != nil {
 			return err
 		}
+		// The turn's one-shots ride the same boundary: lg derives the trigger
+		// maps (sfx/for-events, pure), audio/trigger fires them. In -dry mode
+		// there is no synth and they drop — the derivation still runs, which
+		// keeps the dry demo an end-to-end check of the whole lg lane.
+		if _, err := c.Run(fmt.Sprintf("(audio/trigger (demo/triggers %d))", i)); err != nil {
+			return err
+		}
+		cue, err := evalString(c, fmt.Sprintf("(demo/cue %d)", i))
+		if err != nil {
+			return err
+		}
 
-		fmt.Printf("%2d  %-24s target %s  tension %s  bpm %3.0f  pulse %.2f\n",
-			i+1, label, meter(target), meter(tension), m.params.BPM, m.params.PulseGain)
+		fmt.Printf("%2d  %-24s target %s  tension %s  bpm %3.0f  pulse %.2f  %s\n",
+			i+1, label, meter(target), meter(tension), m.params.BPM, m.params.PulseGain, cue)
 
 		if !dry {
 			time.Sleep(turnDur)
