@@ -1,4 +1,4 @@
-package main
+package host
 
 import (
 	"fmt"
@@ -19,8 +19,8 @@ import (
 
 func musicRuntime(t *testing.T) *api.LetGo {
 	t.Helper()
-	m := &music{params: engine.DeriveDungeon(1, 0, 0)}
-	install(m)
+	m := NewMusic(engine.DeriveDungeon(1, 0, 0))
+	Install(m)
 	c, err := api.NewLetGo("musictest")
 	if err != nil {
 		t.Fatal(err)
@@ -237,8 +237,8 @@ func TestMusicSeedStablePerFloorAndIgnoresRngHead(t *testing.T) {
 // and rising tension must move the parameters the tension axis is defined to
 // move. Guards against the pipeline type-checking but landing nowhere.
 func TestParamsForDrivesTheEngine(t *testing.T) {
-	m := &music{params: engine.DeriveDungeon(1, 0, 0)}
-	install(m)
+	m := NewMusic(engine.DeriveDungeon(1, 0, 0))
+	Install(m)
 	c, err := api.NewLetGo("musicdrive")
 	if err != nil {
 		t.Fatal(err)

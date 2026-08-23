@@ -1,4 +1,4 @@
-package main
+package host
 
 import (
 	"crypto/sha256"
@@ -16,10 +16,10 @@ import (
 // option), depth indexes the scale tables, and tension gates whole branches.
 // A single spot check passes with any of those broken.
 
-func lgRuntime(t *testing.T) (*api.LetGo, *music) {
+func lgRuntime(t *testing.T) (*api.LetGo, *Music) {
 	t.Helper()
-	m := &music{params: engine.DeriveDungeon(1, 0, 0)}
-	install(m)
+	m := NewMusic(engine.DeriveDungeon(1, 0, 0))
+	Install(m)
 	c, err := api.NewLetGo("parity")
 	if err != nil {
 		t.Fatal(err)

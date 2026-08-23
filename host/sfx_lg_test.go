@@ -1,4 +1,4 @@
-package main
+package host
 
 import (
 	"fmt"
@@ -15,10 +15,10 @@ import (
 // behaviour (pan, delay, voice death) is pinned in engine/sfx_test.go; here
 // the question is whether the lg layer says the right things to it.
 
-func sfxRuntime(t *testing.T) (*api.LetGo, *music) {
+func sfxRuntime(t *testing.T) (*api.LetGo, *Music) {
 	t.Helper()
-	m := &music{params: engine.DeriveDungeon(1, 0, 0)}
-	install(m)
+	m := NewMusic(engine.DeriveDungeon(1, 0, 0))
+	Install(m)
 	c, err := api.NewLetGo("sfxtest")
 	if err != nil {
 		t.Fatal(err)
