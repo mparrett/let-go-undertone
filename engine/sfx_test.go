@@ -1,0 +1,178 @@
+package engine
+
+import (
+	"bytes"
+	"testing"
+)
+
+// The one-shot lane's contract has two halves: it must be audible (a trigger
+// makes sound, exactly where asked), and it must be inert toward the music
+// (the sequencer's streams and pattern content cannot see it). The tests pin
+// both, plus the failure mode the env design invites — a voice stuck alive in
+// its sustain stage forever.
+
+func render(s *Synth, samples int) []byte {
+	buf := make([]byte, samples*4)
+	s.Read(buf)
+	return buf
+}
+
+// silentParams makes a synth whose sequencer emits nothing: every gain and
+// density is zero and the palette is empty, so its voices run empty patches.
+// What remains audible is the one-shot lane alone. The scale must still be
+// present — buildPatterns indexes it before it checks any gain.
+var silentParams = Params{BPM: 120, Seed: 1, Scale: []int{0, 2, 3, 5, 7, 9, 10}}
+
+func TestGainZeroShotLeavesMusicByteIdentical(t *testing.T) {
+	p := DeriveDungeon(7, 3, 0.5)
+	a := NewSynth(p)
+	b := NewSynth(p)
+	if !b.Trigger("footstep", 43, 0, 0.5, 0, 99) {
+		t.Fatal("trigger refused")
+	}
+	if !bytes.Equal(render(a, SampleRate*2), render(b, SampleRate*2)) {
+		t.Error("a gain-0 one-shot changed the music render; the lane must be inert toward the sequencer")
+	}
+}
+
+func TestTriggerIsAudibleAndDeterministic(t *testing.T) {
+	run := func() []byte {
+		s := NewSynth(silentParams)
+		s.Trigger("hit", 45, 1, 0.5, 0, 7)
+		s.Trigger("pluck", 81, 0.7, 0.5, 70, 8)
+		return render(s, SampleRate)
+	}
+	first := run()
+	if !nonSilent(first) {
+		t.Fatal("two one-shots rendered pure silence")
+	}
+	if !bytes.Equal(first, run()) {
+		t.Error("same triggers, same seeds, different PCM — one-shots must render deterministically")
+	}
+}
+
+func TestHumanizeVariesBySeed(t *testing.T) {
+	run := func(seed uint64) []byte {
+		s := NewSynth(silentParams)
+		s.Trigger("footstep", 43, 1, 0.5, 0, seed)
+		return render(s, SampleRate/4)
+	}
+	if bytes.Equal(run(1), run(2)) {
+		t.Error("different trigger seeds rendered identical footsteps; humanize is what stops the machine-gun effect")
+	}
+}
+
+func TestDelayedShotStartsOnTime(t *testing.T) {
+	const delayMS = 100.0
+	s := NewSynth(silentParams)
+	s.Trigger("footstep", 43, 1, 0.5, delayMS, 3)
+	buf := render(s, SampleRate/2)
+	first := -1
+	for i := 0; i < len(buf); i += 4 {
+		if buf[i] != 0 || buf[i+1] != 0 || buf[i+2] != 0 || buf[i+3] != 0 {
+			first = i / 4
+			break
+		}
+	}
+	want := int(delayMS * SampleRate / 1000)
+	if first < want || first > want+SampleRate/100 {
+		t.Errorf("first audible sample at %d, want within [%d, %d] — the delay is meant to be sample-accurate",
+			first, want, want+SampleRate/100)
+	}
+}
+
+func TestPanIsPerVoice(t *testing.T) {
+	// footstep has no opSend, so with the sequencer silent a hard-left pan
+	// must leave the right channel at exact digital zero.
+	s := NewSynth(silentParams)
+	s.Trigger("footstep", 43, 1, 0, 0, 4)
+	buf := render(s, SampleRate/4)
+	left, right := false, false
+	for i := 0; i < len(buf); i += 4 {
+		if buf[i] != 0 || buf[i+1] != 0 {
+			left = true
+		}
+		if buf[i+2] != 0 || buf[i+3] != 0 {
+			right = true
+		}
+	}
+	if !left {
+		t.Error("hard-left footstep: left channel silent")
+	}
+	if right {
+		t.Error("hard-left footstep leaked into the right channel; pan must be per voice")
+	}
+}
+
+// The env's sustain stage keeps a voice alive while gate is true, so a
+// one-shot whose gate never expired would run its patch forever — inaudible
+// at sustain 0, but a permanent per-sample cost that stacks with every
+// footstep taken. The sample-clock gate in runShots is what prevents that.
+func TestShotVoicesDie(t *testing.T) {
+	s := NewSynth(silentParams)
+	s.Trigger("footstep", 43, 1, 0.5, 0, 5)
+	s.Trigger("hit", 45, 1, 0.5, 0, 6)
+	s.Trigger("pluck", 81, 1, 0.5, 0, 7)
+	render(s, SampleRate*4)
+	for i := range s.fx.shots {
+		if s.fx.shots[i].active {
+			t.Errorf("shot voice %d still active after 4s; its gate never expired", i)
+		}
+	}
+}
+
+func TestPoolOverflowStealsInsteadOfGrowing(t *testing.T) {
+	s := NewSynth(silentParams)
+	for i := 0; i < nShots*4; i++ {
+		s.Trigger("hit", 45, 0.5, 0.5, float64(i), uint64(i))
+	}
+	render(s, SampleRate) // must not panic, and everything must still decay
+	render(s, SampleRate*3)
+	for i := range s.fx.shots {
+		if s.fx.shots[i].active {
+			t.Errorf("shot voice %d still active after an overflow burst", i)
+		}
+	}
+}
+
+func TestUnknownShotNameIsDroppedNotFatal(t *testing.T) {
+	s := NewSynth(silentParams)
+	if s.Trigger("kazoo", 60, 1, 0.5, 0, 1) {
+		t.Error("unknown shot name accepted; the vocabulary lives above this seam and stale names must drop")
+	}
+	buf := render(s, SampleRate/10)
+	if nonSilent(buf) {
+		t.Error("unknown shot made sound")
+	}
+}
+
+func nonSilent(buf []byte) bool {
+	for _, c := range buf {
+		if c != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// The production shape: the lg thread triggers while the audio callback
+// goroutine renders. Run under -race this is the test that proves the lane's
+// locking discipline; without -race it still shakes out ordering panics.
+func TestConcurrentTriggerWhileRendering(t *testing.T) {
+	s := NewSynth(silentParams)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for i := 0; i < 200; i++ {
+			s.Trigger("footstep", 43, 0.5, 0.5, float64(i%40), uint64(i))
+		}
+	}()
+	render(s, SampleRate*2)
+	<-done
+	render(s, SampleRate*4)
+	for i := range s.fx.shots {
+		if s.fx.shots[i].active {
+			t.Errorf("shot voice %d still active after the burst settled", i)
+		}
+	}
+}

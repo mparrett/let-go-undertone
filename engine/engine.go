@@ -60,6 +60,11 @@ type Voice struct {
 	gateRows int
 	units    []ustate
 	active   bool
+
+	// gateSamples is the one-shot lane's gate clock (sfx.go). Sequencer
+	// voices gate in rows via step(); one-shots are off the grid, so their
+	// gate expires in samples instead. Zero for sequencer voices.
+	gateSamples int
 }
 
 func (v *Voice) trigger(patch Patch, note, gateRows int, gain float64, seed uint64) {
@@ -552,6 +557,7 @@ type Synth struct {
 	dl, dr        []float64 // delay lines
 	dpos          int
 	dbus          float64
+	fx            sfx // one-shot lane (sfx.go); the sequencer never sees it
 
 	// VU meter tap: read-only from the synthesis path's view — nothing
 	// here feeds back into the samples, so renders stay byte-identical.
@@ -659,6 +665,7 @@ func (s *Synth) frame() (int16, int16) {
 			s.voices[i].run(&l, &r, &s.dbus)
 		}
 	}
+	s.runShots(&l, &r)
 	// cross-fed stereo delay
 	wl, wr := s.dl[s.dpos], s.dr[s.dpos]
 	s.dl[s.dpos] = s.dbus + wr*0.5
