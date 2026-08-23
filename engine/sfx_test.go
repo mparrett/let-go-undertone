@@ -110,9 +110,9 @@ func TestPanIsPerVoice(t *testing.T) {
 // footstep taken. The sample-clock gate in runShots is what prevents that.
 func TestShotVoicesDie(t *testing.T) {
 	s := NewSynth(silentParams)
-	s.Trigger("footstep", 43, 1, 0.5, 0, 5)
-	s.Trigger("hit", 45, 1, 0.5, 0, 6)
-	s.Trigger("pluck", 81, 1, 0.5, 0, 7)
+	for i, name := range []string{"footstep", "hit", "pluck", "thud"} {
+		s.Trigger(name, 43, 1, 0.5, 0, uint64(5+i))
+	}
 	render(s, SampleRate*4)
 	for i := range s.fx.shots {
 		if s.fx.shots[i].active {
@@ -173,6 +173,19 @@ func TestConcurrentTriggerWhileRendering(t *testing.T) {
 	for i := range s.fx.shots {
 		if s.fx.shots[i].active {
 			t.Errorf("shot voice %d still active after the burst settled", i)
+		}
+	}
+}
+
+// Every patch in the library must make sound on its own. A patch whose units
+// mis-stack renders silence rather than erroring, so this is the check that
+// catches a bad edit to the tables.
+func TestEveryShotIsAudible(t *testing.T) {
+	for name := range shotLib {
+		s := NewSynth(silentParams)
+		s.Trigger(name, 45, 1, 0.5, 0, 11)
+		if !nonSilent(render(s, SampleRate)) {
+			t.Errorf("%s rendered silence", name)
 		}
 	}
 }

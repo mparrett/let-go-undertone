@@ -51,6 +51,23 @@ var hit = Patch{
 	{opOut, [4]float64{0.5, 0.5}},
 }
 
+// thud: damage you TAKE. The deliberate inverse of hit — no bright crack, a
+// slower body, and a low filtered noise wash under it. Dealt damage should
+// read as impact you caused; taken damage as something landing on you.
+var thud = Patch{
+	{opEnv, [4]float64{0.002, 0.22, 0, 0.12}},
+	{opOsc, [4]float64{-7, shpSine, 14, 0.06}},
+	{opMul, [4]float64{}},
+	{opSend, [4]float64{0.2, 0, 0, 0}},
+	{opOut, [4]float64{0.95, 0.5}},
+	{opEnv, [4]float64{0.004, 0.14, 0, 0.08}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{500, 0, 0, 0}},
+	{opLpf, [4]float64{500, 0, 0, 0}},
+	{opOut, [4]float64{0.75, 0.5}},
+}
+
 // shotDef pairs a patch with its gate length. One-shots are not on the
 // sequencer grid, so nothing counts gate rows for them; the gate is in
 // milliseconds and expires in frame().
@@ -62,6 +79,7 @@ type shotDef struct {
 var shotLib = map[string]shotDef{
 	"footstep": {footstep, 15},
 	"hit":      {hit, 25},
+	"thud":     {thud, 40},
 	// pickup reuses the Karplus-Strong lead: pitched by the caller from the
 	// floor's own scale, which is what keeps found-a-rune in key with the score.
 	"pluck": {pluck, 60},
