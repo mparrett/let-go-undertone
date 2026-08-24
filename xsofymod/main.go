@@ -167,13 +167,18 @@ func (m *module) start() {
 		SampleRate:   engine.SampleRate,
 		ChannelCount: 2,
 		Format:       oto.FormatSignedInt16LE,
+		BufferSize:   engine.DeviceBuffer,
 	})
 	if err != nil {
 		fmt.Println("xsofy-audio: no audio device:", err)
 		return
 	}
 	<-ready
-	ctx.NewPlayer(io.Reader(synth)).Play()
+	player := ctx.NewPlayer(io.Reader(synth))
+	// oto's default read-ahead is half a second, which a one-shot has to wait
+	// out before it is heard — see engine.PlayerBuffer for the measurement.
+	player.SetBufferSize(engine.PlayerBufferBytes())
+	player.Play()
 
 	m.mu.Lock()
 	m.synth = synth

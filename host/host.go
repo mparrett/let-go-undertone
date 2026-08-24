@@ -171,6 +171,7 @@ func (m *Music) Start() vm.Value {
 		SampleRate:   engine.SampleRate,
 		ChannelCount: 2,
 		Format:       oto.FormatSignedInt16LE,
+		BufferSize:   engine.DeviceBuffer,
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "audio/music-start:", err)
@@ -195,6 +196,9 @@ func (m *Music) Start() vm.Value {
 	// built from the snapshot, so catch it up to whatever is current.
 	m.synth.SetParameters(m.params)
 	m.player = ctx.NewPlayer(io.Reader(m.synth))
+	// Before Play: oto's default read-ahead is half a second, which a
+	// one-shot has to wait out (see engine.PlayerBuffer).
+	m.player.SetBufferSize(engine.PlayerBufferBytes())
 	m.player.Play()
 	m.starting = false
 	return vm.NIL
