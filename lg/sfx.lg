@@ -1,6 +1,16 @@
 ;; sfx.lg — the one-shot vocabulary: game events -> engine triggers.
 ;;
-;; PROTOTYPE. On integration this becomes `xsofy.sfx` — and per the decoupling
+;; SUPERSEDED, and deliberately frozen. `xsofy/sfx.lg` is the real one and the
+;; only one to edit — it has since grown :hit-dealt / :hit-taken and severity
+;; scaling that this file does not have, and it is what the game and the
+;; tuning bench (`just tune`) both run. This copy survives only to drive the
+;; scripted arc in demo.lg, which predates the split; do not tune here, and do
+;; not port changes back. If the arc ever needs the newer vocabulary, point it
+;; at xsofy's file the way the tuner does rather than copying again.
+;;
+;; The original prototype header follows.
+;;
+;; On integration this becomes `xsofy.sfx` — and per the decoupling
 ;; assessment it must be the SINGLE frontend-agnostic home for this vocabulary:
 ;; the vfx seam's one thinness is a lifecycle copied per consumer, kept in sync
 ;; by a docstring. Audio does not repeat that; every frontend that plays sound

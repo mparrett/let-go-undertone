@@ -1,0 +1,171 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>xsofy sfx tuner</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background:#0d0d10; color:#cfcabb; margin:0; padding:1rem 1rem 3rem;
+         font:14px/1.5 ui-monospace, Menlo, monospace; -webkit-text-size-adjust:100%; }
+  h1 { font-size:.85rem; letter-spacing:.18em; color:#8a8474; margin:0 0 .2rem; }
+  #status { color:#6f9a7d; min-height:1.4em; margin-bottom:1rem; font-size:12px; }
+  fieldset { border:1px solid #232329; border-radius:.5rem; margin:0 0 1rem; padding:.8rem; }
+  legend { color:#8a8474; font-size:11px; letter-spacing:.12em; padding:0 .4rem; }
+  .row { display:flex; gap:.5rem; flex-wrap:wrap; margin-bottom:.6rem; }
+  button { font:inherit; font-size:15px; padding:.85rem 1rem; border-radius:.5rem;
+           border:1px solid #3a3a42; background:#1a1a20; color:#cfcabb;
+           flex:1 1 8rem; min-height:3rem; touch-action:manipulation; }
+  button:active { background:#2a2a34; }
+  button.wide { flex-basis:100%; }
+  button:disabled { opacity:.35; }
+  label { display:block; margin:.55rem 0; font-size:12px; color:#9a958a; }
+  label span { color:#cfcabb; float:right; font-variant-numeric:tabular-nums; }
+  input[type=range] { width:100%; margin-top:.3rem; height:1.8rem; }
+  .check { display:flex; align-items:center; gap:.5rem; font-size:13px; }
+  .check input { width:1.2rem; height:1.2rem; }
+  pre { white-space:pre-wrap; word-break:break-all; font-size:11px; color:#8f8a80;
+        background:#121216; border:1px solid #232329; border-radius:.5rem;
+        padding:.6rem; margin:0; max-height:9rem; overflow-y:auto; }
+  .hint { font-size:11px; color:#6c6862; margin:.4rem 0 0; }
+</style>
+
+<h1>XSOFY SFX TUNER</h1>
+<div id="status">loading…</div>
+
+<fieldset>
+  <legend>fire</legend>
+  <div class="row">
+    <button data-kind="hit-dealt" disabled>hit dealt</button>
+    <button data-kind="hit-taken" disabled>hit taken</button>
+  </div>
+  <div class="row">
+    <button data-kind="footstep" disabled>footstep</button>
+    <button data-kind="pickup" disabled>pickup</button>
+    <button data-kind="combat-hit" disabled>combat (distant)</button>
+  </div>
+  <div class="row">
+    <button id="walk" class="wide" disabled>walk 8 steps — machine-gun check</button>
+  </div>
+  <div class="row">
+    <button id="fight" class="wide" disabled>fight: 3 hits, rising, then a kill</button>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>event</legend>
+  <label>severity — fraction of the target's max hp <span id="sev-v">0.30</span>
+    <input type="range" id="sev" min="0" max="1" step="0.01" value="0.3"></label>
+  <label class="check"><input type="checkbox" id="killed"> killed (adds the fall)</label>
+  <label>distance — spatial events only <span id="dist-v">0</span>
+    <input type="range" id="dist" min="0" max="12" step="0.5" value="0"></label>
+  <label>direction — left … right <span id="dir-v">0.0</span>
+    <input type="range" id="dir" min="-1" max="1" step="0.05" value="0"></label>
+</fieldset>
+
+<fieldset>
+  <legend>music bed</legend>
+  <p class="hint">Judge a one-shot against the bed it competes with, not in
+    silence — that is how a gain gets picked that turns out wrong in the game.</p>
+  <label class="check"><input type="checkbox" id="music-on" checked> bed playing</label>
+  <label>depth <span id="depth-v">1</span>
+    <input type="range" id="depth" min="1" max="9" step="1" value="1"></label>
+  <label>tension <span id="tension-v">0.00</span>
+    <input type="range" id="tension" min="0" max="1" step="0.01" value="0"></label>
+</fieldset>
+
+<fieldset>
+  <legend>what the vocabulary returned</legend>
+  <pre id="out">—</pre>
+  <p class="hint">Straight from xsofy's own sfx.lg. Edit the constants there,
+    reload, and this changes with it.</p>
+</fieldset>
+
+<script src="tuner-exec.js"></script>
+<script>
+  const $ = id => document.getElementById(id);
+  const status = $('status');
+  const out = $('out');
+
+  // Bound to the wasm before it boots, so a failure during load is visible
+  // rather than silent in the console.
+  window.XsofyTunerFailed = msg => { status.textContent = 'failed: ' + msg; };
+  // Audio unlocks on a gesture, and the gesture is a tap on these very
+  // buttons — so they must be live BEFORE audio is. The first tap may be
+  // silent; it is what opens the device. Gating the buttons on readiness
+  // instead deadlocks the user out of ever producing the gesture.
+  window.XsofyTunerReady = () => { status.textContent = 'audio live'; };
+  const enable = () => {
+    document.querySelectorAll('button').forEach(b => b.disabled = false);
+    status.textContent = 'ready — tap any sound (the first tap unlocks audio)';
+  };
+
+  const live = (id, fmt) => {
+    const el = $(id), out = $(id + '-v');
+    const show = () => out.textContent = fmt(el.value);
+    el.addEventListener('input', show); show();
+    return el;
+  };
+  const sev = live('sev', v => (+v).toFixed(2));
+  const dist = live('dist', v => (+v).toFixed(0));
+  const dir = live('dir', v => (+v).toFixed(1));
+  const depth = live('depth', v => v);
+  const tension = live('tension', v => (+v).toFixed(2));
+
+  const pushMusic = () => window.XsofyTunerMusic &&
+    window.XsofyTunerMusic(+depth.value, +tension.value, $('music-on').checked);
+  [depth, tension].forEach(el => el.addEventListener('change', pushMusic));
+  $('music-on').addEventListener('change', pushMusic);
+
+  function fire(kind, over = {}) {
+    if (!window.XsofyTunerFire) return;
+    const d = Object.assign({
+      kind,
+      severity: +sev.value,
+      dist: +dist.value,
+      dir: +dir.value,
+      killed: $('killed').checked,
+    }, over);
+    out.textContent = window.XsofyTunerFire(d) || '(no triggers)';
+  }
+
+  document.querySelectorAll('button[data-kind]').forEach(b =>
+    b.addEventListener('click', () => { pushMusic(); fire(b.dataset.kind); }));
+
+  // Sequences: the two questions that a single tap cannot answer — whether
+  // repeated footsteps machine-gun, and whether a rising exchange reads as
+  // rising.
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  $('walk').addEventListener('click', async () => {
+    pushMusic();
+    for (let i = 0; i < 8; i++) { fire('footstep', { killed: false }); await sleep(420); }
+  });
+  $('fight').addEventListener('click', async () => {
+    pushMusic();
+    for (const s of [0.15, 0.35, 0.6]) { fire('hit-dealt', { severity: s, killed: false }); await sleep(650); }
+    await sleep(200);
+    fire('hit-taken', { severity: 0.5, killed: false });
+    await sleep(700);
+    fire('hit-dealt', { severity: 0.9, killed: true });
+  });
+
+  // Boot: fetch xsofy's real lg in dependency order, hand each to the wasm,
+  // then push the initial bed. Fetching rather than embedding is what keeps
+  // the bench honest — it plays the game's current vocabulary, not a copy.
+  const NS = ['hash', 'det', 'music', 'sfx'];
+  const go = new Go();
+  WebAssembly.instantiateStreaming(fetch('tuner.wasm'), go.importObject)
+    .then(async r => {
+      go.run(r.instance);
+      status.textContent = 'loading xsofy sfx vocabulary…';
+      for (const ns of NS) {
+        const src = await fetch(`lg/${ns}.lg`).then(x => {
+          if (!x.ok) throw new Error(`lg/${ns}.lg — ${x.status}`);
+          return x.text();
+        });
+        const err = window.XsofyTunerLoad(`xsofy.${ns}`, src);
+        if (err) throw new Error(`${ns}: ${err}`);
+      }
+      pushMusic();
+      enable();
+    })
+    .catch(e => status.textContent = 'failed: ' + e.message);
+</script>
