@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -30,6 +31,10 @@ type Music struct {
 	synth  *engine.Synth
 	player *oto.Player
 	ctx    *oto.Context
+
+	// starting guards the window between opening the device and the unlock
+	// gesture arriving, so a second Start cannot open a second context.
+	starting bool
 }
 
 // NewMusic starts from base parameters; the lg script is expected to
@@ -123,14 +128,28 @@ func (m *Music) trigger(v vm.Value) vm.Value {
 		if !ok {
 			continue
 		}
-		note, gain, pan, delay := 60, 1.0, 0.5, 0.0
-		integer(lgm, "note", &note)
-		flt(lgm, "gain", &gain)
-		flt(lgm, "pan", &pan)
-		flt(lgm, "delay-ms", &delay)
+		sh := engine.Shot{Name: name, Gain: 1, Pan: 0.5}
+		flt(lgm, "gain", &sh.Gain)
+		flt(lgm, "pan", &sh.Pan)
+		flt(lgm, "delay-ms", &sh.DelayMS)
+		if integer(lgm, "note", &sh.Note) {
+			sh.HasNote = true
+		} else if integer(lgm, "degree", &sh.Degree) {
+			sh.HasDegree = true
+			integer(lgm, "octave", &sh.Octave)
+		}
+		// Seeds may arrive as an lg int (the prototype's own lg) or as a
+		// decimal string (xsofy's, which has to survive a JSON hop). Accept
+		// both, so this host can drive either vocabulary unchanged.
 		var seed int
-		integer(lgm, "seed", &seed)
-		m.synth.Trigger(name, note, gain, pan, delay, uint64(seed))
+		if integer(lgm, "seed", &seed) {
+			sh.Seed = uint64(seed)
+		} else if s, ok := kwStr(lgm, "seed"); ok {
+			if v, err := strconv.ParseInt(s, 10, 64); err == nil {
+				sh.Seed = uint64(v)
+			}
+		}
+		m.synth.TriggerShot(sh)
 	}
 	return vm.NIL
 }
@@ -140,10 +159,14 @@ func (m *Music) trigger(v vm.Value) vm.Value {
 // gesture (autoplay policy), not from lg.
 func (m *Music) Start() vm.Value {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if m.player != nil {
+	if m.player != nil || m.starting {
+		m.mu.Unlock()
 		return vm.NIL
 	}
+	m.starting = true
+	p := m.params
+	m.mu.Unlock()
+
 	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
 		SampleRate:   engine.SampleRate,
 		ChannelCount: 2,
@@ -151,13 +174,29 @@ func (m *Music) Start() vm.Value {
 	})
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "audio/music-start:", err)
+		m.mu.Lock()
+		m.starting = false
+		m.mu.Unlock()
 		return vm.NIL
 	}
+	// Deliberately NOT holding the mutex here. In a browser this channel does
+	// not close until the user makes an unlocking gesture, which can be never
+	// — and holding the lock across that wait deadlocks every other method,
+	// including Started(), which callers poll precisely to find out whether
+	// this finished. (Cost a real debugging session: it presented as the wasm
+	// runtime killing the module for deadlock, not as a lock-ordering bug.)
 	<-ready
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.ctx = ctx
-	m.synth = engine.NewSynth(m.params)
+	m.synth = engine.NewSynth(p)
+	// Parameters may have moved while we waited for the gesture; the synth is
+	// built from the snapshot, so catch it up to whatever is current.
+	m.synth.SetParameters(m.params)
 	m.player = ctx.NewPlayer(io.Reader(m.synth))
 	m.player.Play()
+	m.starting = false
 	return vm.NIL
 }
 
@@ -298,4 +337,32 @@ func LoadEmbedded(c *api.LetGo) error {
 		}
 	}
 	return nil
+}
+
+// LoadSource loads one lg namespace from source text through core's
+// load-string — the same lane as LoadEmbedded, but for sources the caller
+// supplies at runtime. The tuner uses it to load xsofy's OWN music.lg and
+// sfx.lg, fetched over HTTP, so what it plays is the shipping vocabulary
+// rather than a copy that can drift.
+func LoadSource(c *api.LetGo, name, text string) error {
+	if err := c.Def("undertone-loaded-src", text); err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	if _, err := c.Run("(load-string undertone-loaded-src)"); err != nil {
+		return fmt.Errorf("%s: %w", name, err)
+	}
+	return nil
+}
+
+// SetParams replaces the parameter state outright and stages it. Distinct
+// from the lg-facing partial merge: a caller that owns the whole derivation
+// (the tuner's depth/tension sliders) wants replacement, not merge, or
+// muting the bed would leave the previous gains behind.
+func (m *Music) SetParams(p engine.Params) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.params = p
+	if m.synth != nil {
+		m.synth.SetParameters(p)
+	}
 }

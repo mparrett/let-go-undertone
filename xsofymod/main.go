@@ -101,57 +101,43 @@ func (m *module) frame(detail js.Value) {
 	m.fireTriggers(detail.Get("triggers"))
 }
 
-// fireTriggers stages the frame's one-shots. Notes arrive one of two ways:
-// :note for sounds with no musical context (impacts, steps), or
-// :degree + :octave for sounds that must land in key — resolved here against
-// the SAME parameters that pitched the music, so a pickup chime is in the
-// floor's scale by construction.
+// fireTriggers parses the frame's trigger maps into engine.Shot and stages
+// them. Interpretation of the map — above all resolving a scale degree
+// against the parameters that pitched the music — lives in the engine, so
+// this host and the let-go one cannot drift apart on what a trigger means.
 func (m *module) fireTriggers(trs js.Value) {
 	if m.synth == nil || trs.Type() != js.TypeObject {
 		return
 	}
 	for i := 0; i < trs.Length(); i++ {
 		t := trs.Index(i)
-		shot := t.Get("shot")
-		if shot.Type() != js.TypeString {
+		name := t.Get("shot")
+		if name.Type() != js.TypeString {
 			continue
 		}
-		note := 60
-		if n := t.Get("note"); n.Type() == js.TypeNumber {
-			note = n.Int()
-		} else if d := t.Get("degree"); d.Type() == js.TypeNumber {
-			note = m.resolveDegree(d.Int(), numOr(t.Get("octave"), 0))
+		sh := engine.Shot{
+			Name:    name.String(),
+			Gain:    floatOr(t.Get("gain"), 1),
+			Pan:     floatOr(t.Get("pan"), 0.5),
+			DelayMS: floatOr(t.Get("delay-ms"), 0),
 		}
-		var seed uint64
-		if s := t.Get("seed"); s.Type() == js.TypeString {
-			if v, err := strconv.ParseInt(s.String(), 10, 64); err == nil {
-				seed = uint64(v)
+		if n := t.Get("note"); n.Type() == js.TypeNumber {
+			sh.Note, sh.HasNote = n.Int(), true
+		} else if d := t.Get("degree"); d.Type() == js.TypeNumber {
+			sh.Degree, sh.HasDegree = d.Int(), true
+			if o := t.Get("octave"); o.Type() == js.TypeNumber {
+				sh.Octave = o.Int()
 			}
 		}
-		m.synth.Trigger(shot.String(), note,
-			floatOr(t.Get("gain"), 1), floatOr(t.Get("pan"), 0.5),
-			floatOr(t.Get("delay-ms"), 0), seed)
+		// Seeds cross as decimal strings (see frame): f64 would round an
+		// int64 past 2^53.
+		if s := t.Get("seed"); s.Type() == js.TypeString {
+			if v, err := strconv.ParseInt(s.String(), 10, 64); err == nil {
+				sh.Seed = uint64(v)
+			}
+		}
+		m.synth.TriggerShot(sh)
 	}
-}
-
-// resolveDegree maps a scale degree in the current parameters' scale to an
-// absolute note, wrapping octaves past the top of the scale.
-func (m *module) resolveDegree(degree, octave int) int {
-	sc := m.params.Scale
-	if len(sc) == 0 {
-		return m.params.Root + 12*octave
-	}
-	if degree < 0 {
-		degree = 0
-	}
-	return m.params.Root + 12*(octave+degree/len(sc)) + sc[degree%len(sc)]
-}
-
-func numOr(v js.Value, d int) int {
-	if v.Type() == js.TypeNumber {
-		return v.Int()
-	}
-	return d
 }
 
 func floatOr(v js.Value, d float64) float64 {

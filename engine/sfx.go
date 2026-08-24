@@ -110,6 +110,61 @@ type sfx struct {
 	pos     int
 }
 
+// Shot is one trigger-map's worth of intent, as the sfx vocabulary expresses
+// it. Every host parses its own wire format (let-go values, JS values) into
+// this, so the interpretation — above all the degree resolution — happens
+// once, here, rather than being mirrored per host and drifting.
+type Shot struct {
+	Name    string
+	Gain    float64
+	Pan     float64
+	DelayMS float64
+	Seed    uint64
+
+	// Pitch arrives one of two ways. Note is absolute, for sounds with no
+	// musical context (impacts, footsteps). Degree+Octave is a position in
+	// the CURRENT parameters' scale, for sounds that must land in key; the
+	// synth resolves it against the same scale that pitched the music, which
+	// is why resolution belongs here and not in a host.
+	Note      int
+	Degree    int
+	Octave    int
+	HasNote   bool
+	HasDegree bool
+}
+
+// TriggerShot stages a Shot, resolving a scale degree if that is how pitch
+// was expressed. Returns false if the patch name is unknown.
+func (s *Synth) TriggerShot(sh Shot) bool {
+	note := 60
+	switch {
+	case sh.HasNote:
+		note = sh.Note
+	case sh.HasDegree:
+		note = s.resolveDegree(sh.Degree, sh.Octave)
+	}
+	return s.Trigger(sh.Name, note, sh.Gain, sh.Pan, sh.DelayMS, sh.Seed)
+}
+
+// resolveDegree maps a scale degree in the current parameters' scale to an
+// absolute note, wrapping octaves past the top of the scale.
+func (s *Synth) resolveDegree(degree, octave int) int {
+	p := s.params
+	if s.next != nil {
+		// Staged parameters have not reached a pattern boundary yet, but a
+		// one-shot fires now — pitch it against what the player is about to
+		// hear rather than the phrase that is ending.
+		p = *s.next
+	}
+	if degree < 0 {
+		degree = 0
+	}
+	if len(p.Scale) == 0 {
+		return p.Root + 12*octave
+	}
+	return p.Root + 12*(octave+degree/len(p.Scale)) + p.Scale[degree%len(p.Scale)]
+}
+
 // Trigger stages a one-shot. Unknown names are dropped, not errors: the sfx
 // vocabulary lives above this seam, and a stale name must not crash a game.
 // gain scales the patch's own levels; pan is 0..1; delayMS offsets the start.
