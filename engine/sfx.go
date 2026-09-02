@@ -21,19 +21,33 @@ import (
 // as weight. Quiet is a design property of the footstep, not a mix decision —
 // it plays every turn.
 
-// footstep: a dull noise tick over a faint low knock. Two lowpass poles so it
-// reads as boot-on-stone, not snare.
+// footstep: a bright tick, a shorter body under it, and only a trace of the
+// low knock. The shape is set by where it has to be HEARD, not by what a boot
+// on stone looks like in isolation. Measured against the depth-2 bed, the
+// first cut put 89% of its energy below 120 Hz — 17 dB under the drone, in
+// the one band the bed owns outright and a phone speaker cannot reproduce at
+// all. It was inaudible twice over. Energy above 350 Hz costs nothing there:
+// the bed's own noise and drone are lowpassed at 280-300, so the step has
+// that range to itself. See TestFootstepIsHeardOverTheBed.
 var footstep = Patch{
-	{opEnv, [4]float64{0.001, 0.045, 0, 0.025}},
+	// tick: the part that cuts. Short and bright, one pole so it keeps top end.
+	{opEnv, [4]float64{0.001, 0.028, 0, 0.02}},
 	{opOsc, [4]float64{0, shpNoise, 0, 1}},
 	{opMul, [4]float64{}},
-	{opLpf, [4]float64{600, 0, 0, 0}},
-	{opLpf, [4]float64{600, 0, 0, 0}},
-	{opOut, [4]float64{0.9, 0.5}},
-	{opEnv, [4]float64{0.001, 0.06, 0, 0.03}},
-	{opOsc, [4]float64{-12, shpSine, 5, 0.02}},
-	{opMul, [4]float64{}},
+	{opLpf, [4]float64{3000, 0, 0, 0}},
 	{opOut, [4]float64{0.5, 0.5}},
+	// body: boot on stone rather than a click, in a band a phone still has.
+	{opEnv, [4]float64{0.001, 0.05, 0, 0.03}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{900, 0, 0, 0}},
+	{opLpf, [4]float64{900, 0, 0, 0}},
+	{opOut, [4]float64{0.75, 0.5}},
+	// knock: kept, quietly, so the step still has weight on headphones.
+	{opEnv, [4]float64{0.001, 0.05, 0, 0.03}},
+	{opOsc, [4]float64{0, shpSine, 5, 0.02}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.22, 0.5}},
 }
 
 // hit: the classic impact — a sine thump falling fast from above, plus a
