@@ -26,6 +26,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"runtime"
 
 	"github.com/ebitengine/oto/v3"
 
@@ -80,6 +81,11 @@ func main() {
 		<-ready
 		pl := ctx.NewPlayer(io.Reader(s))
 		pl.Play()
+		// pl is unused from here, so without this the GC may collect the
+		// handle mid-playback and oto's runtime.AddCleanup closes the player
+		// — silence, no error. runMeterUI blocks for the process lifetime,
+		// which is exactly how long the handle has to stay reachable.
+		defer runtime.KeepAlive(pl)
 		runMeterUI(s, desc, *vu)
 	default:
 		flag.Usage()

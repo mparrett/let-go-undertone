@@ -47,6 +47,16 @@ type module struct {
 	tension float64
 	started bool
 	pending []engine.Params // frames that arrived before audio unlocked
+
+	// ctx and player are held for their LIFETIME, not for use: oto attaches
+	// a runtime.AddCleanup to every *oto.Player that closes it once the
+	// handle is unreachable (internal/mux.Mux.NewPlayer). The mux keeps only
+	// the inner playerImpl, so nothing else roots the handle — a player left
+	// in a local goes silent at whatever GC first notices, with no error,
+	// since Close returns the player's nil err. That is a *permanent* silence
+	// arriving minutes into play, which is exactly how it was reported.
+	ctx    *oto.Context
+	player *oto.Player
 }
 
 var mod = &module{params: engine.DeriveDungeon(1, 1, 0)}
@@ -182,6 +192,7 @@ func (m *module) start() {
 
 	m.mu.Lock()
 	m.synth = synth
+	m.ctx, m.player = ctx, player // see the field comment: this is what keeps it playing
 	synth.SetParameters(m.params) // catch up to whatever arrived while waiting
 	m.mu.Unlock()
 	fmt.Println("xsofy-audio: playing")
