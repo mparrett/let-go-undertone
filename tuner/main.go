@@ -57,6 +57,14 @@ func lgLiteral(d js.Value) string {
 	if v := d.Get("killed"); v.Type() == js.TypeBoolean && v.Bool() {
 		b.WriteString(" :killed true")
 	}
+	// :broke is meaningful in both states (a web you did not tear is quieter,
+	// not silent), so unlike :killed it is written even when false.
+	if v := d.Get("broke"); v.Type() == js.TypeBoolean {
+		fmt.Fprintf(&b, " :broke %t", v.Bool())
+	}
+	if v := d.Get("dirOfTravel"); v.Type() == js.TypeString {
+		fmt.Fprintf(&b, " :dir-of-travel :%s", v.String())
+	}
 	b.WriteString("}")
 	return b.String()
 }

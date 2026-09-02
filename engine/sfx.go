@@ -82,6 +82,127 @@ var thud = Patch{
 	{opOut, [4]float64{0.75, 0.5}},
 }
 
+// creak: a door. A saw gliding UP through a wooden lowpass with a breath of
+// noise over it — the glide is what says hinge rather than tone. Sweep params
+// are the starting offset in semitones and how fast it decays back to the
+// note, so a negative offset rises and a positive one falls.
+var creak = Patch{
+	{opEnv, [4]float64{0.02, 0.30, 0, 0.14}},
+	{opOsc, [4]float64{0, shpSaw, -7, 0.30}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{1100, 0, 0, 0}},
+	{opSend, [4]float64{0.25, 0, 0, 0}},
+	{opOut, [4]float64{0.34, 0.5}},
+	{opEnv, [4]float64{0.015, 0.22, 0, 0.1}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{2000, 0, 0, 0}},
+	{opOut, [4]float64{0.16, 0.5}},
+}
+
+// cry: something died. A falling saw with an inharmonic partial over it, long
+// enough to read as a voice rather than an impact, and sent hard to the delay
+// so it belongs to the room the music is in.
+var cry = Patch{
+	{opEnv, [4]float64{0.012, 0.45, 0, 0.28}},
+	{opOsc, [4]float64{12, shpSaw, 13, 0.28}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{2400, 0, 0, 0}},
+	{opSend, [4]float64{0.4, 0, 0, 0}},
+	{opOut, [4]float64{0.4, 0.5}},
+	{opEnv, [4]float64{0.012, 0.3, 0, 0.2}},
+	{opOsc, [4]float64{19.02, shpSine, 13, 0.28}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.16, 0.5}},
+}
+
+// sink / lift: changing floor. The longest sounds in the set, because they
+// score a transition rather than an action — a noise wash for the movement
+// and a swept sine for the direction, falling to go down and rising to come
+// up. The bright layer is what survives a phone speaker.
+var sink = Patch{
+	{opEnv, [4]float64{0.05, 0.5, 0, 0.4}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{2600, 0, 0, 0}},
+	{opOut, [4]float64{0.3, 0.5}},
+	{opEnv, [4]float64{0.06, 0.55, 0, 0.4}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{700, 0, 0, 0}},
+	{opSend, [4]float64{0.45, 0, 0, 0}},
+	{opOut, [4]float64{0.5, 0.5}},
+	{opEnv, [4]float64{0.04, 0.6, 0, 0.45}},
+	{opOsc, [4]float64{-5, shpSine, 15, 0.4}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.4, 0.5}},
+}
+
+var lift = Patch{
+	{opEnv, [4]float64{0.05, 0.5, 0, 0.4}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{3000, 0, 0, 0}},
+	{opOut, [4]float64{0.32, 0.5}},
+	{opEnv, [4]float64{0.06, 0.55, 0, 0.4}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{900, 0, 0, 0}},
+	{opSend, [4]float64{0.45, 0, 0, 0}},
+	{opOut, [4]float64{0.42, 0.5}},
+	{opEnv, [4]float64{0.04, 0.6, 0, 0.45}},
+	{opOsc, [4]float64{-5, shpSine, -15, 0.4}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.4, 0.5}},
+}
+
+// thunk: the game said no. Short, dull and unmusical on purpose — a refusal
+// should not be pleasant enough to want to hear again — but with enough top
+// end to actually register on a phone.
+var thunk = Patch{
+	{opEnv, [4]float64{0.002, 0.08, 0, 0.05}},
+	{opOsc, [4]float64{0, shpSine, 7, 0.025}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.55, 0.5}},
+	{opEnv, [4]float64{0.002, 0.05, 0, 0.03}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{1500, 0, 0, 0}},
+	{opOut, [4]float64{0.3, 0.5}},
+}
+
+// snap: a web tearing. Dry and bright and over immediately — the one sound
+// here with no low end at all, which is what keeps it from reading as a hit.
+var snap = Patch{
+	{opEnv, [4]float64{0.001, 0.05, 0, 0.03}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{4200, 0, 0, 0}},
+	{opOut, [4]float64{0.6, 0.5}},
+	{opEnv, [4]float64{0.001, 0.12, 0, 0.06}},
+	{opOsc, [4]float64{12, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{2200, 0, 0, 0}},
+	{opOut, [4]float64{0.22, 0.5}},
+}
+
+// twang: a bow releasing. Karplus-Strong with the feedback pulled well down,
+// so the string dies in a fraction of a second instead of ringing like the
+// pickup chime, plus a noise transient for the release itself.
+var twang = Patch{
+	{opEnv, [4]float64{0.001, 0.22, 0, 0.1}},
+	{opPluck, [4]float64{0, 0.972, 0, 0}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{3200, 0, 0, 0}},
+	{opSend, [4]float64{0.2, 0, 0, 0}},
+	{opOut, [4]float64{0.6, 0.5}},
+	{opEnv, [4]float64{0.001, 0.03, 0, 0.02}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{3800, 0, 0, 0}},
+	{opOut, [4]float64{0.3, 0.5}},
+}
+
 // shotDef pairs a patch with its gate length. One-shots are not on the
 // sequencer grid, so nothing counts gate rows for them; the gate is in
 // milliseconds and expires in frame().
@@ -94,6 +215,13 @@ var shotLib = map[string]shotDef{
 	"footstep": {footstep, 15},
 	"hit":      {hit, 25},
 	"thud":     {thud, 40},
+	"creak":    {creak, 120},
+	"cry":      {cry, 180},
+	"sink":     {sink, 260},
+	"lift":     {lift, 260},
+	"thunk":    {thunk, 20},
+	"snap":     {snap, 15},
+	"twang":    {twang, 30},
 	// pickup reuses the Karplus-Strong lead: pitched by the caller from the
 	// floor's own scale, which is what keeps found-a-rune in key with the score.
 	"pluck": {pluck, 60},

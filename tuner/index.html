@@ -43,6 +43,20 @@
     <button data-kind="combat-hit" disabled>combat (distant)</button>
   </div>
   <div class="row">
+    <button data-kind="door" disabled>door</button>
+    <button data-kind="death" disabled>death</button>
+    <button data-kind="shoot" disabled>arrow</button>
+    <button data-kind="blocked" disabled>blocked</button>
+  </div>
+  <div class="row">
+    <button data-kind="web" data-over='{"broke":true}' disabled>web — tear free</button>
+    <button data-kind="web" data-over='{"broke":false}' disabled>web — stuck</button>
+  </div>
+  <div class="row">
+    <button data-kind="floor" data-over='{"dirOfTravel":"down"}' disabled>descend</button>
+    <button data-kind="floor" data-over='{"dirOfTravel":"up"}' disabled>ascend</button>
+  </div>
+  <div class="row">
     <button id="walk" class="wide" disabled>walk 8 steps — machine-gun check</button>
   </div>
   <div class="row">
@@ -128,7 +142,10 @@
   }
 
   document.querySelectorAll('button[data-kind]').forEach(b =>
-    b.addEventListener('click', () => { pushMusic(); fire(b.dataset.kind); }));
+    b.addEventListener('click', () => {
+      pushMusic();
+      fire(b.dataset.kind, b.dataset.over ? JSON.parse(b.dataset.over) : {});
+    }));
 
   // Sequences: the two questions that a single tap cannot answer — whether
   // repeated footsteps machine-gun, and whether a rising exchange reads as

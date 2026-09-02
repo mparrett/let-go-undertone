@@ -2,6 +2,7 @@ package engine
 
 import (
 	"math"
+	"sort"
 	"testing"
 )
 
@@ -106,5 +107,37 @@ func TestFootstepIsHeardOverTheBed(t *testing.T) {
 	if hit := shotPeaks(t, p, "hit", 45, 0.9); step[3] >= hit[3] {
 		t.Errorf("footstep is as bright as a hit (%.5f vs %.5f); the every-turn sound "+
 			"must stay the quiet one", step[3], hit[3])
+	}
+}
+
+// Every one-shot has to clear the bed somewhere, or it is decoration nobody
+// hears. This reports the margin for the whole library and fails only on a
+// shot that clears it nowhere — the per-band shape is a taste decision, but
+// "audible at all against the thing it plays over" is not.
+func TestEveryShotClearsTheBedSomewhere(t *testing.T) {
+	p := DeriveDungeon(0x5eed1234, 2, 0)
+	bed, _ := bandStats(NewSynth(p), SampleRate*8)
+
+	names := make([]string, 0, len(shotLib))
+	for n := range shotLib {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+
+	t.Logf("%-9s %s", "shot", "peak-over-bed, dB per band (sub / low / mid / high)")
+	for _, n := range names {
+		pk := shotPeaks(t, p, n, 48, 0.7)
+		var best float64 = math.Inf(-1)
+		margins := make([]float64, 4)
+		for j := range pk {
+			margins[j] = 20 * math.Log10(pk[j]/bed[j])
+			if margins[j] > best {
+				best = margins[j]
+			}
+		}
+		t.Logf("%-9s %+6.1f %+6.1f %+6.1f %+6.1f", n, margins[0], margins[1], margins[2], margins[3])
+		if best < 0 {
+			t.Errorf("%s never rises above the bed (best band %+.1f dB) — it will not be heard", n, best)
+		}
 	}
 }
