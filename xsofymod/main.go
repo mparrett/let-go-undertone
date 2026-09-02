@@ -57,6 +57,12 @@ type module struct {
 	// arriving minutes into play, which is exactly how it was reported.
 	ctx    *oto.Context
 	player *oto.Player
+
+	// muted is the player's own state, not a gain: a muted synth still costs
+	// a phone its battery, so mute pauses the player and stops rendering.
+	// It is honoured at start too, because the page can be muted before the
+	// module ever loads.
+	muted bool
 }
 
 var mod = &module{params: engine.DeriveDungeon(1, 1, 0)}
@@ -188,17 +194,53 @@ func (m *module) start() {
 	// oto's default read-ahead is half a second, which a one-shot has to wait
 	// out before it is heard — see engine.PlayerBuffer for the measurement.
 	player.SetBufferSize(engine.PlayerBufferBytes())
-	player.Play()
 
 	m.mu.Lock()
 	m.synth = synth
 	m.ctx, m.player = ctx, player // see the field comment: this is what keeps it playing
 	synth.SetParameters(m.params) // catch up to whatever arrived while waiting
+	muted := m.muted
+	if !muted {
+		player.Play()
+	}
 	m.mu.Unlock()
-	fmt.Println("xsofy-audio: playing")
+	if muted {
+		fmt.Println("xsofy-audio: loaded, muted")
+	} else {
+		fmt.Println("xsofy-audio: playing")
+	}
+}
+
+// setMuted pauses or resumes the player. Pausing rather than zeroing gain
+// stops the synth being rendered at all, which on a phone is the difference
+// that matters.
+func (m *module) setMuted(v bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.muted = v
+	if m.player == nil {
+		return // start() reads m.muted and will honour it
+	}
+	if v {
+		m.player.Pause()
+	} else {
+		m.player.Play()
+	}
 }
 
 func main() {
+	// The page's mute control exists before this module loads (bootstrap.js),
+	// so adopt whatever it already decided rather than starting loud.
+	if a := js.Global().Get("XsofyAudio"); a.Type() == js.TypeObject {
+		mod.muted = a.Get("muted").Truthy()
+	}
+	js.Global().Set("XsofyAudioSetMuted", js.FuncOf(func(_ js.Value, args []js.Value) any {
+		if len(args) > 0 {
+			mod.setMuted(args[0].Truthy())
+		}
+		return nil
+	}))
+
 	go mod.start()
 
 	js.Global().Call("addEventListener", "xsofy/audio",
