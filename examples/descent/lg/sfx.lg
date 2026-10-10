@@ -1,0 +1,121 @@
+;; sfx.lg — the one-shot vocabulary: game events -> engine triggers.
+;;
+;; SUPERSEDED, and deliberately frozen. `xsofy/sfx.lg` is the real one and the
+;; only one to edit — it has since grown :hit-dealt / :hit-taken and severity
+;; scaling that this file does not have, and it is what the game and the
+;; tuning bench (`just tune`) both run. This copy survives only to drive the
+;; scripted arc in demo.lg, which predates the split; do not tune here, and do
+;; not port changes back. If the arc ever needs the newer vocabulary, point it
+;; at xsofy's file the way the tuner does rather than copying again.
+;;
+;; The original prototype header follows.
+;;
+;; On integration this becomes `xsofy.sfx` — and per the decoupling
+;; assessment it must be the SINGLE frontend-agnostic home for this vocabulary:
+;; the vfx seam's one thinness is a lifecycle copied per consumer, kept in sync
+;; by a docstring. Audio does not repeat that; every frontend that plays sound
+;; asks this namespace, none reimplements it.
+;;
+;; Everything here is PURE: an event descriptor comes in, a vector of trigger
+;; maps goes out, and the caller hands them to audio/trigger (fire-and-forget,
+;; write-only — a dropped or divergent sound can never reach world state).
+;;
+;; The descriptor says WHAT HAPPENED — {:kind :combat-hit :dist 3 :dir 0.5} —
+;; never how it sounds. That is the seam that keeps procedural-vs-samples a
+;; consumer decision: swap the engine behind audio/trigger and nothing above
+;; this file moves.
+;;
+;; Event kinds and their spatial fields line up with xsofy's sound.lg taxonomy
+;; (combat-hit, footstep, ...), whose deliver-sound already computes dist and
+;; visibility for its near/mid/far text and throws them away. On integration
+;; the descriptor is built right there, from values that already exist.
+
+(ns sfx
+  (:require [music]
+            [ambience]))
+
+;; ---- spatial model ----
+
+(defn attenuate
+  "Distance -> gain scale, hyperbolic like `pressed`: adjacent is nearly
+  full, six tiles is a murmur, and it never quite reaches zero — audibility
+  cutoff is the producer's call (deliver-sound already has a radius), not
+  the mix's."
+  [dist]
+  (/ 1.0 (+ 1.0 (* 0.3 (double (max 0 dist))))))
+
+(defn pan-of
+  "Direction -1..1 (left..right) -> pan 0..1, kept off the hard edges: a
+  fully one-eared sound reads as a headphone glitch, not a position."
+  [dir]
+  (+ 0.5 (* 0.35 (double (or dir 0)))))
+
+;; ---- per-event seed ----
+
+(defn- shot-seed
+  "INTEGRATION: replace with (det/combine seed-input [:sfx salt]).
+  Seeds the engine-side humanize jitter. Salted per event so two footsteps in
+  a row differ — which is the whole point — while the same replay step still
+  yields the same seed."
+  [world salt]
+  (bit-or (bit-xor (unchecked-multiply (unchecked-add (or (:seed-input world) 0) salt)
+                                       ambience/golden)
+                   1442695040888963407)
+          1))
+
+(defn- jitter
+  "A small deterministic offset in [-n, n] from a seed, for note variation."
+  [seed n]
+  (- (ambience/umod (ambience/xorshift seed) (+ (* 2 n) 1)) n))
+
+;; ---- the vocabulary ----
+;; One function per kind, one shared entry point. Gains are relative to the
+;; music bed: the footstep is quiet BY DESIGN — it plays every turn.
+
+(defn- footstep-shots [world ev seed]
+  (let [g (* 0.32 (attenuate (or (:dist ev) 0)))]
+    [{:shot :footstep
+      :note (+ 43 (jitter seed 2))
+      :gain g
+      :pan  (pan-of (:dir ev))
+      :seed seed}]))
+
+(defn- combat-hit-shots [world ev seed]
+  [{:shot :hit
+    :note (+ 45 (jitter seed 3))
+    :gain (* 0.9 (attenuate (or (:dist ev) 0)))
+    :pan  (pan-of (:dir ev))
+    :seed seed}])
+
+(defn- pickup-shots
+  "Two plucks a fifth apart, high register, 70 ms apart — and pitched from
+  the floor's OWN scale via the same derivation the music uses, so the chime
+  is always in key with whatever is playing. This is the trick a sample
+  library cannot do at any price."
+  [world ev seed]
+  (let [p    (music/params-for world 0.0)
+        root (+ (:root p) 24)
+        n2   (+ root (nth (:scale p) 4))]
+    [{:shot :pluck :note root :gain 0.65 :pan 0.45 :seed seed}
+     {:shot :pluck :note n2 :gain 0.55 :pan 0.55 :delay-ms 70
+      :seed (ambience/xorshift seed)}]))
+
+(defn for-event
+  "One event descriptor -> a vector of trigger maps. Unknown kinds yield []
+  rather than an error: producers may emit kinds a given consumer does not
+  voice yet, and silence is the correct rendering of those."
+  [world ev seed]
+  (case (:kind ev)
+    :footstep   (footstep-shots world ev seed)
+    :combat-hit (combat-hit-shots world ev seed)
+    :pickup     (pickup-shots world ev seed)
+    []))
+
+(defn for-events
+  "The per-turn entry point: the turn's event list -> one flat trigger
+  vector. `salt` names the turn (any monotonic per-turn value); each event is
+  further salted by position so simultaneous events don't share jitter."
+  [world salt evs]
+  (vec (mapcat (fn [i ev]
+                 (for-event world ev (shot-seed world (+ (* (or salt 0) 31) i))))
+               (range (count evs)) evs)))

@@ -1,0 +1,155 @@
+;; music.lg — the (world -> tension) map, and the world -> parameters pipeline.
+;;
+;; PROTOTYPE. On integration this becomes `xsofy.music` at `xsofy/music.lg`;
+;; the two places that changes are marked INTEGRATION below.
+;;
+;; Split of responsibilities, deliberately:
+;;
+;;   ambience.lg  (seed, depth, tension) -> parameter map    [taste]
+;;   music.lg     world -> tension, world -> seed            [game state]
+;;
+;; Everything here is a PURE function of the world. Nothing in this file
+;; holds state and nothing here performs I/O — the caller pushes the map at
+;; the engine, and the caller owns the one piece of memory the design needs
+;; (see `advance` at the bottom). That keeps the whole tension model unit
+;; testable, and keeps xsofy from growing a world field or a mutable atom for
+;; a value only the speakers ever read.
+
+(ns music
+  (:require [ambience]))
+
+;; ---- the two tension sources ----
+
+(defn engaged-hostiles
+  "Count of creatures that are both VISIBLE (in :fov) and have noticed you
+  (:ai :state one of hunt/investigate/flee).
+
+  This is deliberately the same predicate `play/apply-auto-stops` uses to
+  break auto-explore. Reusing it means the music tightens exactly when the
+  game itself decides something is worth stopping for — one definition of
+  danger instead of two that drift. Raw creature count on the floor is the
+  wrong signal: most are asleep across the map and irrelevant to how the
+  moment feels."
+  [world]
+  (let [fov (or (:fov world) #{})]
+    (count (filter (fn [e]
+                     (and (:ai e)
+                          (not= :player (:id e))
+                          (:pos e)
+                          (contains? fov (:pos e))
+                          (contains? #{:hunt :investigate :flee}
+                                     (get-in e [:ai :state]))))
+                   (vals (or (:entities world) {}))))))
+
+(defn hurt
+  "0..1 from the player's wounds. Squared, so half health is a murmur (0.25)
+  rather than half panic: linear over-reacts to a scratch and leaves no
+  headroom for the genuinely dire. A missing player (death) reads 1.0 through
+  the hp default, which is the intended behaviour and needs no special case."
+  [world]
+  (let [hp     (get-in world [:entities :player :body :hp] 0)
+        max-hp (max 1 (get-in world [:entities :player :body :max-hp] 1))
+        f      (- 1.0 (/ (double hp) (double max-hp)))]
+    (* f f)))
+
+(defn pressed
+  "0..1 from how many engaged hostiles can see you.
+
+  Hyperbolic (n/(n+k)) rather than a clamped ratio, for two reasons: the
+  first hostile is the largest single jump — going from alone to not-alone is
+  the event — and a swarm still reads worse than a pair instead of flattening
+  against a ceiling."
+  [world]
+  (let [n (double (engaged-hostiles world))]
+    (/ n (+ n 2.0))))
+
+;; ---- combining them ----
+
+(defn any-of
+  "Probabilistic OR over 0..1 values: 1 - prod(1 - x).
+
+  NOT a product or a geometric mean. Those are ANDs, and they zero out when
+  either input does, which silently mutes the two tensest situations in the
+  genre: untouched but swarmed, and nearly dead but alone. These are
+  independent sources of dread, so the combinator has to be an OR.
+
+  Also chosen for how it ages: it is symmetric, needs no clamp, reduces to a
+  single source when the others are 0, and adding a third signal later is one
+  more argument rather than a reweighting of the existing ones."
+  [& xs]
+  (- 1.0 (reduce * 1.0 (map (fn [x] (- 1.0 x)) xs))))
+
+(defn tension-target
+  "0..1 — the instantaneous tension the world implies. Pure, so replay
+  reproduces it exactly and no world field is required."
+  [world]
+  (any-of (hurt world) (pressed world)))
+
+;; ---- the seed ----
+
+(defn- fold-seed
+  "INTEGRATION: replace with (det/combine seed-input [:music depth]).
+
+  xsofy's own path-independent fold is the right primitive — it is what
+  derives a floor's layout seed — and putting :music in the context keeps the
+  music on a lineage separate from worldgen, so deriving it can never perturb
+  the floor. This placeholder exists only so the prototype runs outside
+  xsofy."
+  [seed-input depth]
+  (bit-or (bit-xor (unchecked-multiply (unchecked-add seed-input 1)
+                                       -7046029254386353131)
+                   (unchecked-multiply (+ depth 1) 1442695040888963407))
+          1))
+
+(defn music-seed
+  "Stable for a whole floor.
+
+  Emphatically NOT (:seed world): that is the head of the RNG chain and
+  advances every single turn, so feeding it to the derivation would re-pick
+  the lead instrument and re-roll the pattern content constantly.
+  :seed-input is run-scoped (it survives a descent) and depth names the
+  floor, so this is stable exactly as long as the music should be."
+  [world]
+  (fold-seed (or (:seed-input world) 0) (or (:depth world) 1)))
+
+;; ---- the pipeline ----
+
+(defn params-for
+  "world + already-smoothed tension -> the engine's parameter map.
+
+  Tension arrives as an argument rather than being read off the world
+  because it carries memory (see `advance`), and that memory deliberately
+  does not live in the world.
+
+  xsofy has no overworld, so the mood is dungeon and stays that way until
+  there is a surface level to score."
+  [world tension]
+  (ambience/derive-dungeon (music-seed world)
+                           (or (:depth world) 1)
+                           tension))
+
+;; ---- the envelope ----
+
+(defn advance
+  "One step of the tension envelope: instant attack, exponential release.
+
+  Pure — `prev` comes in and the new value goes out, so the accumulator lives
+  in the caller (the audio module), not here. That is the whole trick: the
+  function is testable in lg, and xsofy still gains neither a world field nor
+  a mutable global for a value only the speakers consume. Because the audio
+  surface is write-only, a drifting envelope cannot reach world state.
+
+  Fast attack, slow release is both the standard game-audio shape and the one
+  this engine already uses twice — opEnv, and the VU meter's peak-hold.
+  Dramatically it is the right asymmetry too: danger lands immediately,
+  relief is earned.
+
+  Called once per turn (the module decays per parameter message, and messages
+  are turns), so `decay` is in game-clock units: 0.9 is roughly a seven-turn
+  half life. Without this the ~8 s pattern boundary samples an instantaneous
+  signal and aliases — kill a mob one turn early and the whole next phrase
+  goes calm."
+  [prev target decay]
+  (max target (* prev decay)))
+
+(def default-decay 0.9)

@@ -1,0 +1,31 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>undertone — lg demo</title>
+<style>
+  body { background: #0d0d10; color: #cfcabb; font: 16px/1.5 ui-monospace, Menlo, monospace;
+         margin: 0; padding: 1.2rem; }
+  h1 { font-size: 1.05rem; letter-spacing: .18em; color: #8a8474; margin: 0 0 .3rem; }
+  #status { color: #6f9a7d; min-height: 1.5em; margin-bottom: .8rem; }
+  #controls { display: flex; gap: .6rem; max-width: 26rem; margin-bottom: 1rem; }
+  #controls button { font: inherit; font-size: 1.1rem; padding: .8rem 1rem; border-radius: .5rem;
+          border: 1px solid #3a3a42; background: #1a1a20; color: #cfcabb; }
+  #play { flex: 1; }
+  #play:disabled { opacity: .4; }
+  #stop[hidden] { display: none; }
+  #trace { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; color: #9a958a;
+           background: #121216; border: 1px solid #232329; border-radius: .5rem;
+           padding: .8rem; min-height: 12rem; max-height: 62vh; overflow-y: auto; }
+</style>
+<h1>UNDERTONE · lg demo</h1>
+<div id="status">loading wasm…</div>
+<div id="controls"><button id="play" disabled>&#9654; play the arc</button><button id="stop" hidden>&#9632; stop</button></div>
+<pre id="trace">the scripted descent-and-fight arc: ambience follows tension,
+one-shots (step / hit! / rune!) ride the same per-turn boundary.</pre>
+<script src="wasm_exec.js"></script>
+<script>
+  const go = new Go();
+  WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject)
+    .then(r => go.run(r.instance))
+    .catch(e => document.getElementById("status").textContent = "wasm failed: " + e);
+</script>

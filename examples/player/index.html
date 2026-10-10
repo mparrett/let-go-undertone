@@ -1,0 +1,153 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>undertone</title>
+<style>
+  body { background: #111; color: #cbd; font: 16px/1.5 ui-monospace, Menlo, monospace; display: grid; place-items: center; min-height: 100vh; margin: 0; }
+  #panel { text-align: center; width: 100%; max-width: 34em; padding: 16px; box-sizing: border-box; }
+  #start { font: inherit; font-size: 18px; padding: 14px 0; width: 100%; max-width: 22em; border-radius: 8px; border: 1px solid #7a8; background: #1a2420; color: #cde; margin: 6px 0 4px; }
+  #start[hidden] { display: none; }
+  #status { color: #7a8; }
+  h1 { margin-bottom: 2px; }
+  #sub { color: #567; font-size: 13px; margin-top: 0; }
+  a { color: #9ab; }
+  #vu { display: flex; gap: 14px; justify-content: center; height: min(28vh, 180px); margin: 20px 0 8px; }
+  #vu .band { width: 44px; display: flex; flex-direction: column; }
+  /* fixed green/yellow/red zones on the track; the curtain covers the unfilled top */
+  #vu .meter { position: relative; flex: 1; background: linear-gradient(to top, #365 0%, #7a8 60%, #ca5 60% 83%, #c55 83% 100%); }
+  #vu .curtain { position: absolute; top: 0; left: 0; right: 0; height: 100%; background: #111; transition: height 40ms linear; }
+  #vu .peak { position: absolute; left: 0; right: 0; height: 2px; background: #dcb; bottom: 0%; }
+  #vu .lbl { color: #678; margin-top: 6px; font-size: 12px; text-align: center; }
+  #scenes { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; max-width: 34em; margin: 18px auto 6px; }
+  #scenes a { color: #9ab; text-decoration: none; border: 1px solid #345; border-radius: 6px; padding: 9px 12px; font-size: 15px; }
+  #params { font-size: 13px; color: #678; overflow-wrap: anywhere; }
+  #scenes a.active { color: #cdE; border-color: #7a8; background: #1a2420; }
+</style>
+<div id="panel">
+  <h1>undertone</h1>
+  <p id="sub">generative game ambience from (mood, level, tension, seed)</p>
+  <div id="vu">
+    <div class="band"><div class="meter"><div class="curtain"></div><div class="peak"></div></div><div class="lbl">sub</div></div>
+    <div class="band"><div class="meter"><div class="curtain"></div><div class="peak"></div></div><div class="lbl">low</div></div>
+    <div class="band"><div class="meter"><div class="curtain"></div><div class="peak"></div></div><div class="lbl">mid</div></div>
+    <div class="band"><div class="meter"><div class="curtain"></div><div class="peak"></div></div><div class="lbl">hi</div></div>
+  </div>
+  <p id="status">loading wasm…</p>
+  <button id="start" hidden>&#9654; tap to start</button>
+  <div id="scenes"></div>
+  <p id="params"><code>?mood= ?depth= ?seed= ?tension= ?lead=</code></p>
+</div>
+<script src="wasm_exec.js"></script>
+<script>
+  // Capture AudioContext instances so we (and headless probes) can
+  // inspect state and resume on gesture regardless of oto internals.
+  window.__audioCtxs = [];
+  for (const name of ["AudioContext", "webkitAudioContext"]) {
+    const Orig = window[name];
+    if (!Orig) continue;
+    window[name] = function (...args) {
+      const ctx = new Orig(...args);
+      window.__audioCtxs.push(ctx);
+      return ctx;
+    };
+    window[name].prototype = Orig.prototype;
+  }
+
+  const q = new URLSearchParams(location.search);
+  const depth = q.get("depth") ?? "0";
+  const seed = q.get("seed") ?? "1";
+  const tension = q.get("tension") ?? "0";
+  const mood = q.get("mood") ?? "dungeon";
+  const lead = q.get("lead") ?? "";
+  const status = document.getElementById("status");
+  const startBtn = document.getElementById("start");
+
+  const go = new Go();
+  go.argv = ["homage", "-play", "-mood", mood, "-depth", depth, "-seed", seed, "-tension", tension];
+  if (lead) go.argv.push("-lead", lead);
+  window.undertoneArgs = go.argv; // TinyGo builds read this; their wasm_exec.js drops go.argv
+  // no-cache: revalidate so a stale cached binary can't silently reject new flags
+  WebAssembly.instantiateStreaming(fetch("main.wasm", { cache: "no-cache" }), go.importObject)
+    .then((r) => {
+      status.textContent = `${mood} ${depth}, seed ${seed}, tension ${tension}`;
+      startBtn.hidden = false;
+      // the program never returns in normal play; resolving means it exited (e.g. flag error)
+      go.run(r.instance).then(() => { status.textContent = "wasm exited — see console"; });
+    })
+    .catch((e) => { status.textContent = "wasm failed: " + e; });
+
+  // iOS only unlocks audio inside a real gesture, and Safari doesn't send taps on plain page
+  // background as clicks, so there's a button, and touchend counts too. The engine's player
+  // resumes the context on these same gestures; the page only reports what happened. The
+  // button stays until sound is really running (window.__undertoneAudio appears), so a tap
+  // that didn't take is visible instead of a silent "playing".
+  const playing = () => `playing ${mood}: level ${depth}, seed ${seed}, tension ${tension}`;
+  let waiting = null;
+  const resume = () => {
+    window.__audioCtxs.forEach((c) => c.resume());
+    if (window.__undertoneAudio) { startBtn.hidden = true; status.textContent = playing(); return; }
+    if (waiting) return;
+    status.textContent = "starting…";
+    const t0 = performance.now();
+    waiting = setInterval(() => {
+      if (window.__undertoneAudio) {
+        clearInterval(waiting);
+        startBtn.hidden = true;
+        status.textContent = playing();
+      } else if (performance.now() - t0 > 1500) {
+        clearInterval(waiting); waiting = null;
+        status.textContent = "no sound yet: tap start once more";
+      }
+    }, 100);
+  };
+  startBtn.addEventListener("click", resume);
+  addEventListener("touchend", resume);
+  addEventListener("click", resume);
+  addEventListener("keydown", resume);
+
+  // scene chips: curated param combos, easy to edit
+  const scenes = [
+    ["entrance",        "?depth=0"],
+    ["mid dungeon",     "?depth=3"],
+    ["the abyss",       "?depth=5"],
+    ["abyss panic",     "?depth=5&tension=1"],
+    ["something stalks","?depth=3&tension=0.5"],
+    ["meadow",          "?mood=overworld&depth=0"],
+    ["highlands",       "?mood=overworld&depth=3"],
+    ["the summit",      "?mood=overworld&depth=5"],
+    ["summit chase",    "?mood=overworld&depth=5&tension=0.8"],
+    ["another world",   "?depth=3&seed=42"],
+    ["harp of the deep","?depth=3&lead=pluck"],
+    ["haunted foundry", "?depth=4&lead=clang&tension=0.4"],
+    ["kalimba fields",  "?mood=overworld&depth=2&lead=kalimba"],
+  ];
+  const sc = document.getElementById("scenes");
+  for (const [name, qs] of scenes) {
+    const a = document.createElement("a");
+    a.href = qs;
+    a.textContent = name;
+    const p = new URLSearchParams(qs);
+    if ((p.get("mood") ?? "dungeon") === mood && (p.get("depth") ?? "0") === depth &&
+        (p.get("tension") ?? "0") === tension && (p.get("seed") ?? "1") === seed &&
+        (p.get("lead") ?? "") === lead) {
+      a.className = "active";
+    }
+    sc.appendChild(a);
+  }
+
+  // VU bars from the Go-side meter (window.__homageMeter, ~30 Hz);
+  // same bands, ballistics, and peak-hold decay as the TUI meter.
+  const curtains = document.querySelectorAll("#vu .curtain");
+  const peakEls = document.querySelectorAll("#vu .peak");
+  const peaks = [0, 0, 0, 0];
+  (function draw() {
+    const m = window.__homageMeter;
+    if (m) curtains.forEach((c, i) => {
+      const pct = Math.min(100, Math.pow(m[i], 0.4) * 100);
+      c.style.height = (100 - pct) + "%";
+      peaks[i] = Math.max(m[i], peaks[i] * 0.985);
+      peakEls[i].style.bottom = Math.min(99, Math.pow(peaks[i], 0.4) * 100) + "%";
+    });
+    requestAnimationFrame(draw);
+  })();
+</script>
