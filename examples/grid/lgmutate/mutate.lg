@@ -1,0 +1,79 @@
+(ns grid
+  "Pattern transforms for the grid example, written in lg: the page's
+  mutate button hands the current pattern and a seed to (grid/mutate),
+  and plays what comes back. Deterministic: the same pattern and seed
+  always give the same variation, so a shared link plus a seed is
+  reproducible.")
+
+(def steps 16)
+
+(defn- lcg [x] (mod (+ (* x 1103515245) 12345) 2147483648))
+
+(defn- draw
+  "The i-th draw in [0, n) of a small stream keyed by seed. Three rounds of
+  a linear congruential step: one round left neighbouring steps moving in
+  lockstep (every third note rising together)."
+  [seed i n]
+  (let [x (lcg (lcg (lcg (mod (+ (* seed 7919) (* i 104729) 12345) 2147483648))))]
+    (mod (quot x 65536) n)))
+
+(defn- clamp-degree [d] (max 1 (min d 8)))
+
+(defn- prev-note
+  "The nearest note before step i in a lane, or 5 if there is none, so an
+  added note lands near the phrase rather than anywhere."
+  [lane i]
+  (loop [j (dec i)]
+    (cond (< j 0) 5
+          (pos? (nth lane j)) (nth lane j)
+          :else (recur (dec j)))))
+
+(defn- vary-lead
+  "Most notes stay; some step a degree up or down; a few drop out, and a
+  few empty steps pick up a note next to their neighbour. Drops and adds
+  lean toward 6 to 9 notes, so pressing mutate again and again wanders
+  rather than thinning the phrase out or filling it in."
+  [lead seed]
+  (let [n     (count (filter pos? lead))
+        drop? (fn [r] (and (= r 2) (> n 6)))
+        add?  (fn [r] (or (= r 3) (and (< n 9) (= r 4))))]
+    (mapv (fn [i d]
+            (let [r (draw seed i 10)]
+              (if (pos? d)
+                (cond (= r 0) (clamp-degree (inc d))
+                      (= r 1) (clamp-degree (dec d))
+                      (drop? r) 0
+                      :else d)
+                (if (add? r)
+                  (clamp-degree (+ (prev-note lead i) (dec (draw seed (+ i 100) 3))))
+                  0))))
+          (range steps) lead)))
+
+(defn- vary-bass
+  "Root and fifth trade places now and then; the rhythm stays."
+  [bass seed]
+  (mapv (fn [i d]
+          (if (and (pos? d) (= 0 (draw seed (+ i 200) 6)))
+            (if (= d 1) 5 1)
+            d))
+        (range steps) bass))
+
+(defn- vary-pulse
+  "One off-beat pulse moves; the downbeat stays put."
+  [pulse seed]
+  (let [from (inc (draw seed 300 15))
+        to   (inc (draw seed 301 15))]
+    (if (nth pulse from)
+      (assoc (assoc pulse from false) to true)
+      pulse)))
+
+(defn- digits [lane] (apply str (map (fn [d] (if (true? d) 1 (if (false? d) 0 d))) lane)))
+
+(defn mutate
+  "A variation of grid g ({:lead [..] :bass [..] :pulse [..]}), as the
+  string \"LEAD|BASS|PULSE\" of one digit per step, which is all the host
+  needs to read back."
+  [g seed]
+  (str (digits (vary-lead (vec (:lead g)) seed)) "|"
+       (digits (vary-bass (vec (:bass g)) seed)) "|"
+       (digits (vary-pulse (vec (:pulse g)) seed))))

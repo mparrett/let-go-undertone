@@ -18,6 +18,7 @@
 //	seedGrid(seed)   a starting grid derived from the current params, as JSON
 //	play() / stop()  call from the tap handler: iOS resumes audio only inside one
 //	row()            the step being heard, or -1 while stopped
+//	mutate(json, n)  with -tags lg only: lg's variation of a grid for seed n
 package main
 
 import (
@@ -60,6 +61,17 @@ type paramsJSON struct {
 	Voice string  `json:"voice"`
 	Seed  uint64  `json:"seed"`
 }
+
+func (j gridJSON) grid() engine.Grid {
+	g := engine.Grid{Bed: j.Bed}
+	copy(g.Lead[:], j.Lead)
+	copy(g.Bass[:], j.Bass)
+	copy(g.Pulse[:], j.Pulse)
+	return g
+}
+
+// extraAPI lets an optional build add to window.undertoneGrid (lg.go).
+var extraAPI func(api map[string]any)
 
 func derive(c paramsJSON) engine.Params {
 	var p engine.Params
@@ -112,10 +124,7 @@ func main() {
 			if json.Unmarshal([]byte(a[0].String()), &j) != nil {
 				return nil
 			}
-			g := engine.Grid{Bed: j.Bed}
-			copy(g.Lead[:], j.Lead)
-			copy(g.Bass[:], j.Bass)
-			copy(g.Pulse[:], j.Pulse)
+			g := j.grid()
 			syn.SetGrid(&g)
 			return nil
 		}),
@@ -154,6 +163,9 @@ func main() {
 			return syn.RowAt(heard)
 		}),
 		"initial": toJSON(g0),
+	}
+	if extraAPI != nil {
+		extraAPI(api)
 	}
 	js.Global().Set("undertoneGrid", js.ValueOf(api))
 	js.Global().Call("undertoneGridReady")

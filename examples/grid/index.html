@@ -83,6 +83,7 @@
     <button id="clear">clear</button>
     <button class="bed" id="bed" title="the generator's drone, pad and air under the grid">bed</button>
     <button id="share">copy link</button>
+    <button id="mutate" hidden title="a variation of this pattern, computed by lg code">mutate (lg)</button>
   </div>
   <footer>Tap a cell to place a note, tap it again to clear; drag to paint. One note per step in each lane.
     Rows are scale degrees, so the pattern stays in key when the mood changes.
@@ -217,6 +218,15 @@
     paint(); pushGrid();
     status.textContent = `seed ${st.seed}`;
   };
+  let mutations = 0;
+  $("mutate").onclick = () => {
+    const out = undertoneGrid.mutate(JSON.stringify({ lead: st.lead, bass: st.bass, pulse: st.pulse, bed: st.bed }), ++mutations);
+    if (!out) { status.textContent = "lg is still starting; try again in a moment"; return; }
+    const g = JSON.parse(out);
+    st.lead = g.lead; st.bass = g.bass; st.pulse = g.pulse;
+    paint(); pushGrid();
+    status.textContent = `mutation ${mutations}, by lg`;
+  };
   $("share").onclick = async () => {
     history.replaceState(null, "", encode());
     try { await navigator.clipboard.writeText(location.href); status.textContent = "link copied"; }
@@ -258,6 +268,7 @@
     }
     paint(); pushParams(); pushGrid();
     $("play").disabled = false;
+    $("mutate").hidden = !undertoneGrid.mutate;
     status.textContent = "ready: tap play";
   };
   paint();
