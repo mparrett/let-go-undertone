@@ -13,7 +13,7 @@
 // This is the Go CLI front end; the engine lives in ../../engine and the
 // let-go binding in ../../letgo.
 //
-//	go run ./cmd/undertone -play                          # live, endless, via oto
+//	go run ./cmd/undertone -play                          # live, endless (oto; webaudio in a browser)
 //	go run ./cmd/undertone -play -depth 5 -tension 0.8    # the abyss, something coming
 //	go run ./cmd/undertone -play -mood overworld -depth 3 # bright mirror
 //	go run ./cmd/undertone -wav out.wav -depth 4 -lead pluck  # deterministic render
@@ -22,11 +22,7 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"os"
-	"runtime"
-
-	"github.com/ebitengine/oto/v3"
 
 	"github.com/mparrett/let-go-undertone/engine"
 )
@@ -67,23 +63,12 @@ func main() {
 		}
 		fmt.Printf("rendered %.0fs %s -> %s\n", *dur, desc, *wav)
 	case *play:
-		ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
-			SampleRate:   engine.SampleRate,
-			ChannelCount: 2,
-			Format:       oto.FormatSignedInt16LE,
-		})
+		stop, err := startPlayback(s)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		<-ready
-		pl := ctx.NewPlayer(io.Reader(s))
-		pl.Play()
-		// pl is unused from here, so without this the GC may collect the
-		// handle mid-playback and oto's runtime.AddCleanup closes the player
-		// — silence, no error. runMeterUI blocks for the process lifetime,
-		// which is exactly how long the handle has to stay reachable.
-		defer runtime.KeepAlive(pl)
+		defer stop()
 		runMeterUI(s, desc, *vu)
 	default:
 		flag.Usage()

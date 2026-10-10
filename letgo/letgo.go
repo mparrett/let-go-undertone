@@ -14,13 +14,11 @@ package letgo
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"strconv"
 	"sync"
 	"sync/atomic"
 
-	"github.com/ebitengine/oto/v3"
 	"github.com/nooga/let-go/pkg/api"
 	"github.com/nooga/let-go/pkg/rt"
 	"github.com/nooga/let-go/pkg/vm"
@@ -30,13 +28,12 @@ import (
 )
 
 // Music holds the host side of the audio surface. The mutex guards the
-// lg-facing methods against the oto callback goroutine reading the synth.
+// lg-facing methods against the output reading the synth.
 type Music struct {
 	mu     sync.Mutex
 	params engine.Params
 	synth  *engine.Synth
-	player *oto.Player
-	ctx    *oto.Context
+	out    output
 
 	// starting guards the window between opening the device and the unlock
 	// gesture arriving, so a second Start cannot open a second context.
@@ -165,48 +162,34 @@ func (m *Music) trigger(v vm.Value) vm.Value {
 // gesture (autoplay policy), not from lg.
 func (m *Music) Start() vm.Value {
 	m.mu.Lock()
-	if m.player != nil || m.starting {
+	if m.out != nil || m.starting {
 		m.mu.Unlock()
 		return vm.NIL
 	}
 	m.starting = true
-	p := m.params
+	syn := engine.NewSynth(m.params)
 	m.mu.Unlock()
 
-	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{
-		SampleRate:   engine.SampleRate,
-		ChannelCount: 2,
-		Format:       oto.FormatSignedInt16LE,
-		BufferSize:   engine.DeviceBuffer,
-	})
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "audio/music-start:", err)
-		m.mu.Lock()
-		m.starting = false
-		m.mu.Unlock()
-		return vm.NIL
-	}
-	// Deliberately NOT holding the mutex here. In a browser this channel does
-	// not close until the user makes an unlocking gesture, which can be never
-	// — and holding the lock across that wait deadlocks every other method,
+	// Deliberately NOT holding the mutex here. In a browser the output is not
+	// ready until the user makes an unlocking gesture, which can be never —
+	// and holding the lock across that wait deadlocks every other method,
 	// including Started(), which callers poll precisely to find out whether
 	// this finished. (Cost a real debugging session: it presented as the wasm
 	// runtime killing the module for deadlock, not as a lock-ordering bug.)
-	<-ready
+	out, err := openOutput(syn)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.ctx = ctx
-	m.synth = engine.NewSynth(p)
-	// Parameters may have moved while we waited for the gesture; the synth is
-	// built from the snapshot, so catch it up to whatever is current.
-	m.synth.SetParameters(m.params)
-	m.player = ctx.NewPlayer(io.Reader(m.synth))
-	// Before Play: oto's default read-ahead is half a second, which a
-	// one-shot has to wait out (see engine.PlayerBuffer).
-	m.player.SetBufferSize(engine.PlayerBufferBytes())
-	m.player.Play()
 	m.starting = false
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "audio/music-start:", err)
+		return vm.NIL
+	}
+	m.out = out
+	m.synth = syn
+	// Parameters may have moved while we waited for the gesture; the synth was
+	// built from a snapshot, so catch it up to whatever is current.
+	m.synth.SetParameters(m.params)
 	return vm.NIL
 }
 
@@ -216,15 +199,37 @@ func (m *Music) Start() vm.Value {
 func (m *Music) Started() bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	return m.player != nil
+	return m.out != nil
+}
+
+// Pause holds the output, and with it the music's clock, until Resume.
+// Go-side only, like Started: pausing is the page's business, not the game's.
+func (m *Music) Pause() {
+	m.mu.Lock()
+	o := m.out
+	m.mu.Unlock()
+	if o != nil {
+		o.Pause()
+	}
+}
+
+// Resume continues after Pause. In a browser, call it from the gesture
+// handler itself (iOS only resumes audio inside one).
+func (m *Music) Resume() {
+	m.mu.Lock()
+	o := m.out
+	m.mu.Unlock()
+	if o != nil {
+		o.Resume()
+	}
 }
 
 func (m *Music) Stop() vm.Value {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.player != nil {
-		m.player.Close()
-		m.player = nil
+	if m.out != nil {
+		m.out.Close()
+		m.out = nil
 	}
 	return vm.NIL
 }
@@ -239,6 +244,14 @@ func (m *Music) renderWAV(path string, seconds float64) vm.Value {
 		fmt.Fprintln(os.Stderr, "audio/render-wav:", err)
 	}
 	return vm.NIL
+}
+
+// output is where a started Music plays: oto natively, webaudio in the
+// browser (output_native.go, output_js.go).
+type output interface {
+	Close()
+	Pause()
+	Resume()
 }
 
 // ---- lg map readers ----
