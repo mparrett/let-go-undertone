@@ -45,10 +45,11 @@ func degreeNote(p Params, base, d int) int {
 	return base + 12*(d/7) + p.Scale[d%7]
 }
 
-// gridBases puts the lead in a bright middle register whatever the mood's
-// root: generator roots run from dungeon-low to overworld-high, and a grid
-// written in one should still sit right after switching to the other.
-func gridBases(p Params) (lead, bass int) {
+// GridBases is the note a grid's row 1 plays in the lead and bass lanes. It
+// puts the lead in a bright middle register whatever the mood's root:
+// generator roots run from dungeon-low to overworld-high, and a grid written
+// in one should still sit right after switching to the other.
+func GridBases(p Params) (lead, bass int) {
 	lead = p.Root
 	for lead < 67 {
 		lead += 12
@@ -78,7 +79,7 @@ var gridBass = pluck
 // applyGrid overwrites this row of the generated pattern with the grid's.
 func (s *Synth) applyGrid(g *Grid, row int) {
 	p := s.params
-	lead, bass := gridBases(p)
+	lead, bass := GridBases(p)
 	for _, t := range []int{0, 2, 4} {
 		if g.Bed {
 			s.pats[t][row].gain *= gridBedScale

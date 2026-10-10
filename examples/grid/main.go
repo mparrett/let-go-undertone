@@ -18,11 +18,13 @@
 //	seedGrid(seed)   a starting grid derived from the current params, as JSON
 //	play() / stop()  call from the tap handler: iOS resumes audio only inside one
 //	row()            the step being heard, or -1 while stopped
+//	key()            the current key and the notes of each lane's rows 1 and 8, as JSON
 //	mutate(json, n)  with -tags lg only: lg's variation of a grid for seed n
 package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"sync/atomic"
 	"syscall/js"
@@ -87,6 +89,37 @@ func derive(c paramsJSON) engine.Params {
 		p.BPM = min(max(c.BPM, 40), 200)
 	}
 	return p
+}
+
+var noteNames = []string{"C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"}
+
+// modeNames names the engine's scales (scalesByDarkness, scalesByBrightness).
+var modeNames = map[[7]int]string{
+	{0, 2, 3, 5, 7, 9, 10}: "dorian",
+	{0, 2, 3, 5, 7, 8, 10}: "minor",
+	{0, 1, 3, 5, 7, 8, 10}: "phrygian",
+	{0, 2, 4, 5, 7, 9, 10}: "mixolydian",
+	{0, 2, 4, 5, 7, 9, 11}: "major",
+	{0, 2, 4, 6, 7, 9, 11}: "lydian",
+}
+
+// keyJSON describes where the grid's rows land: the key, and the note each
+// lane's rows 1 and 8 play (row 8 is row 1 an octave up).
+func keyJSON(p engine.Params) string {
+	var sc [7]int
+	copy(sc[:], p.Scale)
+	mode, ok := modeNames[sc]
+	if !ok {
+		mode = "custom scale"
+	}
+	lead, bass := engine.GridBases(p)
+	name := func(midi int) string { return fmt.Sprintf("%s%d", noteNames[midi%12], midi/12-1) }
+	b, _ := json.Marshal(map[string]string{
+		"key":  noteNames[p.Root%12] + " " + mode,
+		"lead": name(lead), "lead8": name(lead + 12),
+		"bass": name(bass), "bass8": name(bass + 12),
+	})
+	return string(b)
 }
 
 func toJSON(g engine.Grid) string {
@@ -162,6 +195,7 @@ func main() {
 			heard := syn.Frames() - int64(p.Queued().Seconds()*engine.SampleRate)
 			return syn.RowAt(heard)
 		}),
+		"key":     js.FuncOf(func(js.Value, []js.Value) any { return keyJSON(derive(cur)) }),
 		"initial": toJSON(g0),
 	}
 	if extraAPI != nil {

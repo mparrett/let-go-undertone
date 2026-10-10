@@ -9,12 +9,12 @@
     --bg: #0d0d10; --panel: #15151a; --line: #26262e; --fg: #d6d1c2; --mut: #8a8576;
     --lead: #e0b84f; --bass: #5fa8c9; --pulse: #c96a5f; --head: #ffffff14;
     /* phones: as wide as the screen allows */
-    --cell: clamp(17px, calc((100vw - 32px - 28px - 3 * 6px) / 16), 40px);
+    --cell: clamp(17px, calc((100vw - 32px - 32px - 3 * 6px) / 16), 40px);
   }
   * { box-sizing: border-box; }
   body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg);
          font: 15px/1.45 ui-monospace, Menlo, monospace; }
-  main { max-width: calc(28px + 16 * var(--cell) + 3 * 6px); margin: 0 auto; }
+  main { max-width: calc(32px + 16 * var(--cell) + 3 * 6px); margin: 0 auto; }
   .bed.on { color: var(--fg); border-color: var(--mut); background: #22222a; }
   h1 { font-size: 14px; letter-spacing: .2em; color: var(--mut); margin: 0 0 10px; font-weight: 600; }
   #status { color: var(--mut); min-height: 1.45em; margin-bottom: 10px; font-size: 13px; }
@@ -31,15 +31,18 @@
   label.tempo input { flex: 1; accent-color: var(--lead); }
   #bpmv { color: var(--fg); min-width: 3ch; text-align: right; }
 
+  .lab { font-size: 13px; color: var(--mut); }
+  #key { font-size: 13px; color: var(--fg); }
+  .lbl.ref { color: var(--fg); }
   .lane { margin: 12px 0 4px; font-size: 12px; color: var(--mut); letter-spacing: .1em; }
   /* the first step of each beat after the first is 6px wider, padded on the left: beat groups */
   .grid { --C: calc(var(--cell) + 6px); display: grid; row-gap: 2px;
-          grid-template-columns: 28px var(--cell) var(--cell) var(--cell) var(--cell)
+          grid-template-columns: 32px var(--cell) var(--cell) var(--cell) var(--cell)
             var(--C) var(--cell) var(--cell) var(--cell) var(--C) var(--cell) var(--cell) var(--cell)
             var(--C) var(--cell) var(--cell) var(--cell);
           touch-action: pan-y; /* vertical drags scroll the page; drags along a lane paint */
           user-select: none; -webkit-user-select: none; }
-  .lbl { font-size: 11px; color: var(--mut); display: flex; align-items: center; justify-content: flex-end;
+  .lbl { font-size: 10px; color: var(--mut); white-space: nowrap; display: flex; align-items: center; justify-content: flex-end;
          padding-right: 6px; height: var(--cell); }
   .c { height: var(--cell); padding: 1px; cursor: pointer; }
   .c::after { content: ""; display: block; height: 100%; border-radius: 3px; background: var(--panel);
@@ -76,7 +79,7 @@
     <button id="play" disabled>&#9654; play</button>
     <label class="tempo">tempo <input id="bpm" type="range" min="60" max="160" step="1" value="110"><span id="bpmv">110</span></label>
   </div>
-  <div class="bar" id="moods"></div>
+  <div class="bar" id="moods"><span class="lab">mood:</span></div>
   <div class="bar" id="voices"></div>
   <div class="bar">
     <button id="dice" title="a new starting pattern from the next seed">&#8635; new</button>
@@ -166,7 +169,7 @@
     history.replaceState(null, "", encode());
   };
   const pushParams = () => {
-    if (ready) undertoneGrid.setParams(JSON.stringify({ bpm: st.bpm, mood: st.mood, voice: st.voice, seed: st.seed }));
+    if (ready) { undertoneGrid.setParams(JSON.stringify({ bpm: st.bpm, mood: st.mood, voice: st.voice, seed: st.seed })); showKey(); }
     history.replaceState(null, "", encode());
   };
 
@@ -204,6 +207,19 @@
       const b = document.createElement("span"); b.className = "chip"; b.textContent = v; b.dataset.v = v;
       b.onclick = () => { st[key] = v; paint(); pushParams(); };
       $(box).appendChild(b);
+    }
+  }
+  const keyEl = document.createElement("span"); keyEl.id = "key"; $("moods").appendChild(keyEl);
+  // Name the key, and label each melodic lane's rows 1 and 8 with their notes;
+  // the rows between keep their degree numbers.
+  function showKey() {
+    if (!ready) return;
+    const k = JSON.parse(undertoneGrid.key());
+    keyEl.textContent = "· " + k.key;
+    for (const lane of ["lead", "bass"]) {
+      const labels = $(lane).querySelectorAll(".lbl");
+      labels[0].textContent = k[lane + "8"]; labels[0].classList.add("ref");   // row 8 is drawn first
+      labels[7].textContent = k[lane]; labels[7].classList.add("ref");
     }
   }
   $("bpm").oninput = (e) => { st.bpm = +e.target.value; $("bpmv").textContent = st.bpm; pushParams(); };
