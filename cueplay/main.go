@@ -154,9 +154,10 @@ func (m *mixer) Read(p []byte) (int, error) {
 
 func clamp(x float64) float64 { return max(-32768, min(32767, x)) }
 
-// player is package-level on purpose: oto closes a Player once its handle is
-// unreachable, even mid-playback (documented since oto 3.5.1, ebitengine/oto#293).
-var player *oto.Player
+// out holds the player for the life of the program: oto closes a Player once its
+// handle is unreachable, even mid-playback (documented since oto 3.5.1,
+// ebitengine/oto#293). A field, so playerlifetime_test.go can see it's kept.
+var out struct{ player *oto.Player }
 
 func main() {
 	each := flag.Duration("each", 20*time.Second, "how long each cue plays before the next")
@@ -195,8 +196,8 @@ func main() {
 	<-ready
 	m := &mixer{}
 	m.play(cues[0], 0)
-	player = ctx.NewPlayer(m)
-	player.Play()
+	out.player = ctx.NewPlayer(m)
+	out.player.Play()
 	for i, c := range cues {
 		if i > 0 {
 			m.play(c, *fade)
