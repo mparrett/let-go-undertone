@@ -340,19 +340,52 @@ func CurrentMusic() *Music { return current.Load() }
 
 func installAudioNS() {
 	ns := vm.NewNamespace("audio")
-	ns.Def("set-parameters", vm.MustBox(func(v vm.Value) vm.Value {
-		return current.Load().setParameters(v)
+	ns.Def("set-parameters", native("set-parameters", 1, func(a []vm.Value) (vm.Value, error) {
+		return current.Load().setParameters(a[0]), nil
 	}))
-	ns.Def("music-start", vm.MustBox(func() vm.Value { return current.Load().Start() }))
-	ns.Def("music-stop", vm.MustBox(func() vm.Value { return current.Load().Stop() }))
-	ns.Def("trigger", vm.MustBox(func(v vm.Value) vm.Value {
-		return current.Load().trigger(v)
+	ns.Def("music-start", native("music-start", 0, func([]vm.Value) (vm.Value, error) {
+		return current.Load().Start(), nil
+	}))
+	ns.Def("music-stop", native("music-stop", 0, func([]vm.Value) (vm.Value, error) {
+		return current.Load().Stop(), nil
+	}))
+	ns.Def("trigger", native("trigger", 1, func(a []vm.Value) (vm.Value, error) {
+		return current.Load().trigger(a[0]), nil
 	}))
 	// Offline render: how determinism gets checked without a sound card.
-	ns.Def("render-wav", vm.MustBox(func(path string, secs float64) vm.Value {
-		return current.Load().renderWAV(path, secs)
+	ns.Def("render-wav", native("render-wav", 2, func(a []vm.Value) (vm.Value, error) {
+		path, ok := a[0].(vm.String)
+		if !ok {
+			return vm.NIL, fmt.Errorf("audio/render-wav: path must be a string, got %s", a[0].Type().Name())
+		}
+		var secs float64
+		switch v := a[1].(type) {
+		case vm.Float:
+			secs = float64(v)
+		case vm.Int:
+			secs = float64(v)
+		default:
+			return vm.NIL, fmt.Errorf("audio/render-wav: seconds must be a number, got %s", a[1].Type().Name())
+		}
+		return current.Load().renderWAV(string(path), secs), nil
 	}))
 	rt.RegisterNS(ns)
+}
+
+// native wraps fn as an lg function without reflection. vm.MustBox would
+// box a typed Go func through reflect.Value.Call, which TinyGo does not
+// implement: under TinyGo every audio/ call failed, and TinyGo is what gets a
+// browser bundle with let-go in it from 28 MB down to under 6.
+func native(name string, arity int, fn func([]vm.Value) (vm.Value, error)) vm.Value {
+	v, _ := vm.NativeFnType.Wrap(func(a []vm.Value) (vm.Value, error) {
+		if len(a) != arity {
+			return vm.NIL, fmt.Errorf("audio/%s: wants %d argument(s), got %d", name, arity, len(a))
+		}
+		return fn(a)
+	})
+	f := v.(*vm.NativeFn).WithArity(arity, false)
+	f.SetName(name)
+	return f
 }
 
 // LoadEmbedded loads the embedded lg sources (package lg, dependency order)
