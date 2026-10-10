@@ -50,6 +50,8 @@ type ustate struct {
 	rng                   uint64
 	ks                    []float64 // Karplus-Strong delay line, allocated on first sample
 	kpos                  int
+	k                     float64 // cached per-note coefficient: osc phase increment (no sweep) or lpf c
+	kset                  bool
 }
 
 type Voice struct {
@@ -114,10 +116,22 @@ func (v *Voice) run(l, r, delay *float64) {
 			stack[sp] = s.env
 			sp++
 		case opOsc:
-			semis := float64(v.note) + u.p[0] + u.p[2]*s.sweep
-			s.sweep -= s.sweep / (u.p[3]*SampleRate + 1)
-			freq := 440 * math.Pow(2, (semis-69)/12)
-			s.phase += freq / SampleRate
+			var inc float64
+			if u.p[2] == 0 {
+				// no sweep: pitch is fixed for the note's life, so pow runs once
+				if !s.kset {
+					semis := float64(v.note) + u.p[0] + u.p[2]*s.sweep
+					s.k = 440 * math.Pow(2, (semis-69)/12) / SampleRate
+					s.kset = true
+				}
+				s.sweep -= s.sweep / (u.p[3]*SampleRate + 1)
+				inc = s.k
+			} else {
+				semis := float64(v.note) + u.p[0] + u.p[2]*s.sweep
+				s.sweep -= s.sweep / (u.p[3]*SampleRate + 1)
+				inc = 440 * math.Pow(2, (semis-69)/12) / SampleRate
+			}
+			s.phase += inc
 			s.phase -= math.Floor(s.phase)
 			var x float64
 			switch int(u.p[1]) {
@@ -141,7 +155,11 @@ func (v *Voice) run(l, r, delay *float64) {
 			sp--
 			stack[sp-1] *= stack[sp]
 		case opLpf:
-			c := 1 - math.Exp(-2*math.Pi*u.p[0]/SampleRate)
+			if !s.kset {
+				s.k = 1 - math.Exp(-2*math.Pi*u.p[0]/SampleRate)
+				s.kset = true
+			}
+			c := s.k
 			s.lp += c * (stack[sp-1] - s.lp)
 			stack[sp-1] = s.lp
 		case opPluck:
