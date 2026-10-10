@@ -14,7 +14,7 @@
 // JS surface, on window.undertoneGrid:
 //
 //	setGrid(json)    {lead:[16], bass:[16], pulse:[16], bed}: degrees 1..8, 0 = rest
-//	setParams(json)  {bpm, mood: "overworld"|"dungeon", voice, seed}
+//	setParams(json)  {bpm, mood: "overworld"|"dungeon"|"ruins", voice, seed}
 //	seedGrid(seed)   a starting grid derived from the current params, as JSON
 //	play() / stop()  call from the tap handler: iOS resumes audio only inside one
 //	row()            the step being heard, or -1 while stopped
@@ -77,9 +77,14 @@ var extraAPI func(api map[string]any)
 
 func derive(c paramsJSON) engine.Params {
 	var p engine.Params
-	if c.Mood == "dungeon" {
+	switch c.Mood {
+	case "dungeon":
 		p = engine.DeriveDungeon(c.Seed, 2, 0)
-	} else {
+	case "ruins":
+		// The dungeon's shallowest level, where it is still dorian: minor,
+		// but with a raised sixth that keeps it from turning grim.
+		p = engine.DeriveDungeon(c.Seed, 0, 0)
+	default:
 		p = engine.DeriveOverworld(c.Seed, 2, 0)
 	}
 	if c.Voice != "" {

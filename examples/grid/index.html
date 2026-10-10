@@ -33,7 +33,7 @@
   #bpmv { color: var(--fg); min-width: 3ch; text-align: right; }
 
   .lab { font-size: 13px; color: var(--mut); }
-  #key { font-size: 13px; color: var(--fg); }
+  #key { font-size: 13px; color: var(--fg); margin-left: 6px; }
   .lbl.ref { color: var(--fg); }
   .lane { margin: 12px 0 4px; font-size: 12px; color: var(--mut); letter-spacing: .1em; }
   /* the first step of each beat after the first is 6px wider, padded on the left: beat groups */
@@ -111,7 +111,7 @@
 <script src="wasm_exec.js"></script>
 <script>
   const STEPS = 16, DEG = 8;
-  const MOODS = ["overworld", "dungeon"];
+  const MOODS = ["overworld", "ruins", "dungeon"];
   const VOICES = ["kalimba", "bell", "chime", "pluck", "reed", "clang"];
   const $ = (id) => document.getElementById(id);
   const status = $("status");
@@ -135,7 +135,7 @@
     if (!L || !B) return false;
     const p = parseInt(kv.P || "0", 16);
     st = { ...st, lead: L, bass: B, pulse: [...Array(STEPS)].map((_, i) => !!(p & (1 << i))),
-           bpm: Math.min(160, Math.max(60, +kv.t || 110)), mood: kv.m === "d" ? "dungeon" : "overworld",
+           bpm: Math.min(160, Math.max(60, +kv.t || 110)), mood: MOODS.find((m) => m[0] === kv.m) || "overworld",
            voice: VOICES.includes(kv.v) ? kv.v : "kalimba", seed: +kv.s || 1, bed: kv.bed !== "0" };
     return true;
   }
@@ -219,7 +219,7 @@
   function showKey() {
     if (!ready) return;
     const k = JSON.parse(undertoneGrid.key());
-    keyEl.textContent = "· " + k.key;
+    keyEl.textContent = "key: " + k.key;
     for (const lane of ["lead", "bass"]) {
       const labels = $(lane).querySelectorAll(".lbl");
       labels[0].textContent = k[lane + "8"]; labels[0].classList.add("ref");   // row 8 is drawn first
