@@ -3,9 +3,9 @@
 // parameter derivation, all deterministic from a seed.
 //
 // The package boundary exists so more than one front end can drive the same
-// engine: the CLI in the parent directory, and the let-go embedding host in
-// ./lghost, which moves the derivation layer into lg (the audio surface
-// sketch's v1 split: lg is the control language, Go is the DSP engine).
+// engine: the CLI in ../cmd/undertone, and the let-go binding in ../letgo,
+// which moves the derivation layer into lg (lg is the control language, Go is
+// the DSP engine). The package imports nothing from let-go.
 package engine
 
 import (

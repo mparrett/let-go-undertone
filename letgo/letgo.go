@@ -1,10 +1,16 @@
-// Package host is the Go side of the audio surface: the music/one-shot state,
-// the lg-facing natives, and the loader for the embedded lg sources. It exists
-// as a package so more than one front end can embed the same surface — the
-// native CLI host in ../lghost, and the browser demo in ../webdemo, which has
-// no filesystem and loads the lg lane through core's load-string instead of
-// the resolver's load path.
-package host
+// Package letgo binds the undertone engine to let-go as the `audio`
+// namespace: the music/one-shot state, the lg-facing natives, and the loader
+// for the embedded lg sources.
+//
+// Importing the package registers the namespace (see init below), so an lg
+// runtime that links it needs no generated interop: lg code calls
+// audio/set-parameters, audio/music-start, audio/music-stop, audio/trigger
+// and audio/render-wav directly. The natives act on a default Music until a
+// Go host points them elsewhere with SetMusic.
+//
+// Hosts with no filesystem (GOOS=js) load the lg sources through core's
+// load-string instead of the resolver's load path: see LoadEmbedded.
+package letgo
 
 import (
 	"fmt"
@@ -19,8 +25,8 @@ import (
 	"github.com/nooga/let-go/pkg/rt"
 	"github.com/nooga/let-go/pkg/vm"
 
-	"undertone/engine"
-	"undertone/lg"
+	"github.com/mparrett/let-go-undertone/engine"
+	"github.com/mparrett/let-go-undertone/letgo/lg"
 )
 
 // Music holds the host side of the audio surface. The mutex guards the
@@ -138,9 +144,9 @@ func (m *Music) trigger(v vm.Value) vm.Value {
 			sh.HasDegree = true
 			integer(lgm, "octave", &sh.Octave)
 		}
-		// Seeds may arrive as an lg int (the prototype's own lg) or as a
-		// decimal string (xsofy's, which has to survive a JSON hop). Accept
-		// both, so this host can drive either vocabulary unchanged.
+		// Seeds may arrive as an lg int or as a decimal string (a seed that
+		// has to survive a JSON hop loses int64 precision as a number).
+		// Accept both.
 		var seed int
 		if integer(lgm, "seed", &seed) {
 			sh.Seed = uint64(seed)
@@ -223,7 +229,7 @@ func (m *Music) Stop() vm.Value {
 	return vm.NIL
 }
 
-// renderWAV is the spike-only offline lane: it makes "same parameters ->
+// renderWAV is the offline lane: it makes "same parameters ->
 // byte-identical audio" checkable in a test rather than by ear.
 func (m *Music) renderWAV(path string, seconds float64) vm.Value {
 	m.mu.Lock()
@@ -298,36 +304,45 @@ func ints(m *vm.PersistentMap, k string) ([]int, bool) {
 // re-register silently leaves earlier callers writing to the abandoned
 // instance. Swapping the target instead keeps every caller pointed at the
 // live one.
-var (
-	current     atomic.Pointer[Music]
-	installOnce sync.Once
-)
+var current atomic.Pointer[Music]
 
-// Install points the audio namespace at m, registering it on first call. An
-// embedder can do this with no changes to let-go itself, which is what makes
-// this a self-contained spike: vm.NewNamespace + vm.MustBox + rt.RegisterNS
-// are all exported.
-func Install(m *Music) {
-	current.Store(m)
-	installOnce.Do(func() {
-		ns := vm.NewNamespace("audio")
-		ns.Def("set-parameters", vm.MustBox(func(v vm.Value) vm.Value {
-			return current.Load().setParameters(v)
-		}))
-		ns.Def("music-start", vm.MustBox(func() vm.Value { return current.Load().Start() }))
-		ns.Def("music-stop", vm.MustBox(func() vm.Value { return current.Load().Stop() }))
-		ns.Def("trigger", vm.MustBox(func(v vm.Value) vm.Value {
-			return current.Load().trigger(v)
-		}))
-		// spike-only
-		ns.Def("render-wav", vm.MustBox(func(path string, secs float64) vm.Value {
-			return current.Load().renderWAV(path, secs)
-		}))
-		rt.RegisterNS(ns)
-	})
+// init registers the namespace directly rather than through
+// rt.RegisterInstaller: pkg/rt drains its installer queue during its own
+// init, which Go runs before this package's, so a queued installer would
+// silently never run. let-go's go-interop guide prescribes the direct call for
+// out-of-tree bindings.
+func init() {
+	current.Store(NewMusic(engine.DeriveDungeon(1, 0, 0)))
+	installAudioNS()
 }
 
-// LoadEmbedded loads the embedded lg sources (undertone/lg, dependency order)
+// SetMusic points the audio namespace at m. A Go host that wants to own the
+// instance (to start it from a user gesture, or read Params for a trace)
+// creates its own and calls this before running lg code; until then the
+// natives act on a default dungeon-palette Music.
+func SetMusic(m *Music) { current.Store(m) }
+
+// CurrentMusic returns the instance the audio natives act on.
+func CurrentMusic() *Music { return current.Load() }
+
+func installAudioNS() {
+	ns := vm.NewNamespace("audio")
+	ns.Def("set-parameters", vm.MustBox(func(v vm.Value) vm.Value {
+		return current.Load().setParameters(v)
+	}))
+	ns.Def("music-start", vm.MustBox(func() vm.Value { return current.Load().Start() }))
+	ns.Def("music-stop", vm.MustBox(func() vm.Value { return current.Load().Stop() }))
+	ns.Def("trigger", vm.MustBox(func(v vm.Value) vm.Value {
+		return current.Load().trigger(v)
+	}))
+	// Offline render: how determinism gets checked without a sound card.
+	ns.Def("render-wav", vm.MustBox(func(path string, secs float64) vm.Value {
+		return current.Load().renderWAV(path, secs)
+	}))
+	rt.RegisterNS(ns)
+}
+
+// LoadEmbedded loads the embedded lg sources (package lg, dependency order)
 // through core's load-string — the lane for hosts with no filesystem. Each
 // source is handed over as a Def'd var rather than spliced into the expression
 // string, so no escaping of the lg text is ever needed.
@@ -345,9 +360,7 @@ func LoadEmbedded(c *api.LetGo) error {
 
 // LoadSource loads one lg namespace from source text through core's
 // load-string — the same lane as LoadEmbedded, but for sources the caller
-// supplies at runtime. The tuner uses it to load xsofy's OWN music.lg and
-// sfx.lg, fetched over HTTP, so what it plays is the shipping vocabulary
-// rather than a copy that can drift.
+// supplies at runtime, such as namespaces fetched over HTTP by a browser host.
 func LoadSource(c *api.LetGo, name, text string) error {
 	if err := c.Def("undertone-loaded-src", text); err != nil {
 		return fmt.Errorf("%s: %w", name, err)
@@ -360,7 +373,7 @@ func LoadSource(c *api.LetGo, name, text string) error {
 
 // SetParams replaces the parameter state outright and stages it. Distinct
 // from the lg-facing partial merge: a caller that owns the whole derivation
-// (the tuner's depth/tension sliders) wants replacement, not merge, or
+// (depth/tension sliders driving engine.Derive*) wants replacement, not merge, or
 // muting the bed would leave the previous gains behind.
 func (m *Music) SetParams(p engine.Params) {
 	m.mu.Lock()

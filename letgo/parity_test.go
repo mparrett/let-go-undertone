@@ -1,12 +1,12 @@
-package host
+package letgo
 
 import (
 	"crypto/sha256"
 	"fmt"
 	"testing"
 
+	"github.com/mparrett/let-go-undertone/engine"
 	"github.com/nooga/let-go/pkg/api"
-	"undertone/engine"
 )
 
 // The lg derivation is a port, so the property that matters is not "it runs"
@@ -19,12 +19,12 @@ import (
 func lgRuntime(t *testing.T) (*api.LetGo, *Music) {
 	t.Helper()
 	m := NewMusic(engine.DeriveDungeon(1, 0, 0))
-	Install(m)
+	SetMusic(m)
 	c, err := api.NewLetGo("parity")
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.SetLoadPath([]string{"../lg"})
+	c.SetLoadPath([]string{"lg"})
 	if _, err := c.Run("(require 'ambience)"); err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +141,7 @@ func TestSetParametersAcceptsIntForFloat(t *testing.T) {
 	}
 }
 
-// The write-only rule from the spike spec: the surface has no reader, so game
+// The write-only rule: the surface has no reader, so game
 // logic cannot branch on audio state and console noodling cannot taint replay.
 func TestSurfaceIsWriteOnly(t *testing.T) {
 	for _, name := range []string{"audio/get-parameters", "audio/parameters", "audio/playing?"} {

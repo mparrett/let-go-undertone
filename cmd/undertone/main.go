@@ -1,6 +1,5 @@
-// undertone: a tiny generative-ambience engine (the glplat audio spike's
-// engine seed). Architecturally a demo-sized homage to vsariola/sointu —
-// no sointu code, just its shape: instruments are stacks of unit opcodes
+// undertone: a tiny generative-ambience engine. Architecturally a
+// demo-sized homage to vsariola/sointu — no sointu code, just its shape: instruments are stacks of unit opcodes
 // run by a tiny per-sample VM, a tracker-style sequencer drives them, and
 // the whole track is derived deterministically from a seed.
 //
@@ -9,16 +8,15 @@
 // tension (tempo up, pulse in, harmony sours), and the seed, which also
 // picks the lead instrument from a mood-weighted library. SetParameters
 // applies a new map at the next pattern boundary, the same transactional
-// semantics the glplat audio surface sketch proposes for
-// audio/set-parameters.
+// semantics the letgo binding exposes as audio/set-parameters.
 //
-// This file is the Go CLI front end; the engine lives in ./engine and the
-// let-go control-language front end in ./lghost.
+// This is the Go CLI front end; the engine lives in ../../engine and the
+// let-go binding in ../../letgo.
 //
-//	go run . -play                          # live, endless, via oto
-//	go run . -play -depth 5 -tension 0.8    # the abyss, something coming
-//	go run . -play -mood overworld -depth 3 # bright mirror
-//	go run . -wav out.wav -depth 4 -lead pluck  # deterministic render
+//	go run ./cmd/undertone -play                          # live, endless, via oto
+//	go run ./cmd/undertone -play -depth 5 -tension 0.8    # the abyss, something coming
+//	go run ./cmd/undertone -play -mood overworld -depth 3 # bright mirror
+//	go run ./cmd/undertone -wav out.wav -depth 4 -lead pluck  # deterministic render
 package main
 
 import (
@@ -30,7 +28,7 @@ import (
 
 	"github.com/ebitengine/oto/v3"
 
-	"undertone/engine"
+	"github.com/mparrett/let-go-undertone/engine"
 )
 
 func main() {

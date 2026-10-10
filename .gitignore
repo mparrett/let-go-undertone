@@ -1,3 +1,4 @@
-# Build outputs (~3 MB each); rebuild with `go build -o undertone .`
+# Build outputs; rebuild with `go build ./cmd/undertone`
 /undertone
-/sointu-homage
+/lghost
+*.wasm

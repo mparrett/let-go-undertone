@@ -3,10 +3,12 @@
 package main
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
 	"io/fs"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,14 +21,16 @@ import (
 // stops at whatever GC first notices — permanently, and silently, because
 // Close returns the player's nil error. It cost a "the game loses audio after
 // a while" bug that reproduced nowhere else, because every host/ front end
-// happened to store its player in a field and only xsofymod did not.
+// happened to store its player in a field and only one front end did not.
 //
 // The rule this pins: the result of NewPlayer reaches a field, or the function
 // keeps it alive explicitly. Files are parsed directly rather than type-checked,
 // so js-only front ends are covered by a test that runs natively — which is the
-// point, since the one that broke was the js one.
+// point, since the one that broke was the js one. The walk starts at the module
+// root, not this package, because NewPlayer callers live in several packages
+// (and in _moving/, which the go tool skips but this parse does not).
 func TestNewPlayerResultOutlivesItsScope(t *testing.T) {
-	root, err := filepath.Abs(".")
+	root, err := moduleRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,4 +154,22 @@ func mentions(exprs []ast.Expr, name string) bool {
 		})
 	}
 	return found
+}
+
+// moduleRoot walks up from the test's directory to the one holding go.mod.
+func moduleRoot() (string, error) {
+	dir, err := filepath.Abs(".")
+	if err != nil {
+		return "", err
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("no go.mod above %s", dir)
+		}
+		dir = parent
+	}
 }

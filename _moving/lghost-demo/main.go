@@ -39,8 +39,8 @@ import (
 	"github.com/nooga/let-go/pkg/api"
 	"github.com/nooga/let-go/pkg/vm"
 
-	"undertone/engine"
-	"undertone/host"
+	"github.com/mparrett/let-go-undertone/engine"
+	"github.com/mparrett/let-go-undertone/letgo"
 )
 
 func main() {
