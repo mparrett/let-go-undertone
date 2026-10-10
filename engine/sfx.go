@@ -12,6 +12,7 @@
 package engine
 
 import (
+	"math"
 	"sync"
 	"sync/atomic"
 )
@@ -241,6 +242,9 @@ type shotReq struct {
 
 const nShots = 8
 
+// maxPending bounds the queue of shots waiting to start.
+const maxPending = 32
+
 // sfx is the Synth's one-shot state, mutex-guarded because Trigger arrives on
 // the lg thread while frame() drains on the audio callback goroutine.
 type sfx struct {
@@ -291,12 +295,14 @@ func (s *Synth) TriggerShot(sh Shot) bool {
 // resolveDegree maps a scale degree in the current parameters' scale to an
 // absolute note, wrapping octaves past the top of the scale.
 func (s *Synth) resolveDegree(degree, octave int) int {
-	p := s.params
-	if s.next != nil {
+	// Read through the atomics: this runs on the caller's goroutine while
+	// the synth renders on another.
+	p := *s.cur.Load()
+	if n := s.next.Load(); n != nil {
 		// Staged parameters have not reached a pattern boundary yet, but a
 		// one-shot fires now — pitch it against what the player is about to
 		// hear rather than the phrase that is ending.
-		p = *s.next
+		p = n.sanitized()
 	}
 	if degree < 0 {
 		degree = 0
@@ -330,6 +336,12 @@ func (s *Synth) Trigger(name string, note int, gain, pan, delayMS float64, seed 
 		seed:  seed,
 	}
 	s.fx.mu.Lock()
+	// While nothing renders (stopped, or a phone has suspended the page's
+	// audio) the queue only grows; keep the newest, which are the ones the
+	// player will connect to what is happening when sound returns.
+	if len(s.fx.pending) >= maxPending {
+		s.fx.pending = append(s.fx.pending[:0], s.fx.pending[1:]...)
+	}
 	s.fx.pending = append(s.fx.pending, req)
 	s.fx.waiting.Store(true)
 	s.fx.mu.Unlock()
@@ -368,8 +380,7 @@ func (s *Synth) runShots(l, r *float64) {
 				keep = append(keep, q)
 				continue
 			}
-			i := fx.pos % nShots
-			fx.pos++
+			i := fx.voice()
 			fx.shots[i].trigger(q.patch, q.note, 0, q.gain, q.seed)
 			fx.shots[i].gateSamples = q.gate
 			fx.pan[i] = q.pan
@@ -395,4 +406,24 @@ func (s *Synth) runShots(l, r *float64) {
 		*l += mono * (1 - fx.pan[i])
 		*r += mono * fx.pan[i]
 	}
+}
+
+// voice picks the shot voice for a new trigger: a free one if there is one,
+// else the quietest, so a pool overflow cuts the sound least likely to be
+// missed rather than whichever is next in turn.
+func (fx *sfx) voice() int {
+	best, level := 0, math.Inf(1)
+	for k := 0; k < nShots; k++ {
+		i := (fx.pos + k) % nShots
+		v := &fx.shots[i]
+		if !v.active {
+			best = i
+			break
+		}
+		if l := v.level(); l < level {
+			best, level = i, l
+		}
+	}
+	fx.pos = best + 1
+	return best
 }

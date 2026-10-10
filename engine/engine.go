@@ -9,7 +9,9 @@
 package engine
 
 import (
+	"bufio"
 	"encoding/binary"
+	"errors"
 	"math"
 	"os"
 	"sync/atomic"
@@ -73,14 +75,50 @@ func (v *Voice) trigger(patch Patch, note, gateRows int, gain float64, seed uint
 	v.patch = patch
 	v.note = note
 	v.gain = gain
+	// A voice retriggered with the patch it is already sounding carries its
+	// phase, level and filter state into the new note and attacks from where
+	// it is. Starting from zero cut a sounding drone to silence in one sample:
+	// a click at every pattern boundary (a step of 2336 against a normal
+	// largest of 402). A plucked string is struck afresh either way.
+	legato := v.active && samePatch(v.patch, patch) && len(v.units) == len(patch)
+	v.patch = patch
+	v.note = note
+	v.gain = gain
 	v.gate = true
 	v.gateRows = gateRows
 	v.active = true
-	v.units = make([]ustate, len(patch))
-	for i := range v.units {
-		v.units[i].sweep = 1
-		v.units[i].rng = seed*2862933555777941757 + uint64(i) + 3037000493
+	if cap(v.units) < len(patch) {
+		v.units = make([]ustate, len(patch))
 	}
+	v.units = v.units[:len(patch)]
+	for i := range v.units {
+		u := &v.units[i]
+		if legato {
+			*u = ustate{phase: u.phase, env: u.env, lp: u.lp, ks: u.ks[:0]}
+		} else {
+			*u = ustate{ks: u.ks[:0]}
+		}
+		u.sweep = 1
+		u.rng = seed*2862933555777941757 + uint64(i) + 3037000493
+	}
+}
+
+// level is the voice's loudest envelope times its gain: how much it would
+// be missed if cut.
+func (v *Voice) level() float64 {
+	l := 0.0
+	for i := range v.units {
+		if v.patch[i].op == opEnv {
+			l = max(l, v.units[i].env)
+		}
+	}
+	return l * v.gain
+}
+
+// samePatch reports whether a and b are the same patch value. Patches are
+// package-level tables, so identity is the first unit's address.
+func samePatch(a, b Patch) bool {
+	return len(a) == len(b) && len(a) > 0 && &a[0] == &b[0]
 }
 
 // run executes the patch for one sample, accumulating into l/r.
@@ -165,13 +203,18 @@ func (v *Voice) run(l, r, delay *float64) {
 		case opPluck:
 			// Karplus-Strong: a noise burst circulating in a delay line
 			// the length of the period, averaged (lowpassed) each pass.
-			if s.ks == nil {
+			if len(s.ks) == 0 { // a new note: strike the string
 				freq := 440 * math.Pow(2, (float64(v.note)+u.p[0]-69)/12)
 				n := int(SampleRate / freq)
 				if n < 2 {
 					n = 2
 				}
-				s.ks = make([]float64, n)
+				// reuse the last note's line when it is long enough
+				if cap(s.ks) >= n {
+					s.ks = s.ks[:n]
+				} else {
+					s.ks = make([]float64, n)
+				}
 				for i := range s.ks {
 					s.rng = s.rng*6364136223846793005 + 1442695040888963407
 					s.ks[i] = float64(int64(s.rng>>11))/(1<<52) - 1
@@ -566,7 +609,8 @@ func buildPatterns(p Params, pat int) [nTracks][rows]trackRow {
 
 type Synth struct {
 	params        Params
-	next          *Params // staged; applied at the next pattern boundary
+	next          atomic.Pointer[Params] // staged; applied at the next pattern boundary
+	cur           atomic.Pointer[Params] // params, published for other goroutines (resolveDegree)
 	samplesPerRow int
 	rowLeft       int
 	row, pat      int
@@ -615,7 +659,7 @@ func (s *Synth) meter(l, r float64) {
 		if b < 0 {
 			b = -b
 		}
-		s.menv[i] *= mdecay
+		s.menv[i] = flush(s.menv[i] * mdecay)
 		if b > s.menv[i] {
 			s.menv[i] = b
 		}
@@ -640,7 +684,7 @@ func NewSynth(p Params) *Synth {
 
 // SetParameters stages a new parameter map; it takes effect at the next
 // pattern boundary (the audio/set-parameters contract).
-func (s *Synth) SetParameters(p Params) { s.next = &p }
+func (s *Synth) SetParameters(p Params) { s.next.Store(&p) }
 
 // SetParametersNow stages p for the next row instead of the next pattern:
 // for an editor, where a tempo or voice change should be heard at once. The
@@ -650,7 +694,9 @@ func (s *Synth) SetParameters(p Params) { s.next = &p }
 func (s *Synth) SetParametersNow(p Params) { s.now.Store(&p) }
 
 func (s *Synth) apply(p Params) {
+	p = p.sanitized()
 	s.params = p
+	s.cur.Store(&p)
 	s.samplesPerRow = int(SampleRate * 60 / (p.BPM * 2)) // 2 rows per beat: ambient rows are long
 	if s.dl == nil {
 		s.dl = make([]float64, s.samplesPerRow*3)
@@ -663,9 +709,8 @@ func (s *Synth) step() {
 		s.apply(*p)
 	}
 	if s.row == 0 {
-		if s.next != nil {
-			s.apply(*s.next)
-			s.next = nil
+		if p := s.next.Swap(nil); p != nil {
+			s.apply(*p)
 		}
 		s.pats = buildPatterns(s.params, s.pat)
 	}
@@ -708,8 +753,8 @@ func (s *Synth) frame() (int16, int16) {
 	s.runShots(&l, &r)
 	// cross-fed stereo delay
 	wl, wr := s.dl[s.dpos], s.dr[s.dpos]
-	s.dl[s.dpos] = s.dbus + wr*0.5
-	s.dr[s.dpos] = s.dbus*0.7 + wl*0.5
+	s.dl[s.dpos] = flush(s.dbus + wr*0.5)
+	s.dr[s.dpos] = flush(s.dbus*0.7 + wl*0.5)
 	s.dpos = (s.dpos + 1) % len(s.dl)
 	l += wl * 0.5
 	r += wr * 0.5
@@ -738,11 +783,21 @@ func WriteWAV(path string, s *Synth, seconds float64) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-	w := func(v any) { binary.Write(f, binary.LittleEndian, v) }
-	f.WriteString("RIFF")
+	bw := bufio.NewWriter(f)
+	var werr error
+	w := func(v any) {
+		if werr == nil {
+			werr = binary.Write(bw, binary.LittleEndian, v)
+		}
+	}
+	ws := func(s string) {
+		if werr == nil {
+			_, werr = bw.WriteString(s)
+		}
+	}
+	ws("RIFF")
 	w(uint32(36 + len(data)))
-	f.WriteString("WAVEfmt ")
+	ws("WAVEfmt ")
 	w(uint32(16))
 	w(uint16(1)) // PCM
 	w(uint16(2))
@@ -750,8 +805,49 @@ func WriteWAV(path string, s *Synth, seconds float64) error {
 	w(uint32(SampleRate * 4))
 	w(uint16(4))
 	w(uint16(16))
-	f.WriteString("data")
+	ws("data")
 	w(uint32(len(data)))
-	_, err = f.Write(data)
-	return err
+	if werr == nil {
+		_, werr = bw.Write(data)
+	}
+	if werr == nil {
+		werr = bw.Flush()
+	}
+	// Close's error matters too: it is where a full disk often shows up.
+	return errors.Join(werr, f.Close())
+}
+
+// sanitized makes p safe to play. Parameters arrive from lg code and pages,
+// and a bad one used to panic the synth (a scale under 7 notes indexes past
+// its end; a bpm of zero or NaN makes rows infinitely long), which in a
+// browser kills the whole wasm module. Out-of-range values are clamped or
+// replaced, never reported: the write-only contract has no way back.
+func (p Params) sanitized() Params {
+	if len(p.Scale) < 7 {
+		p.Scale = scalesByBrightness[0]
+	}
+	if !(p.BPM >= 20) { // also catches NaN
+		p.BPM = 20
+	}
+	p.BPM = min(p.BPM, 400)
+	p.Root = max(24, min(p.Root, 96))
+	for _, g := range []*float64{&p.DroneGain, &p.FifthGain, &p.PadDensity, &p.BellDensity, &p.AirGain, &p.PulseGain} {
+		if !(*g >= 0) {
+			*g = 0
+		}
+		*g = min(*g, 4)
+	}
+	if p.LeadGate < 1 {
+		p.LeadGate = 1
+	}
+	return p
+}
+
+// flush zeroes values too small to hear, so a decaying feedback line never
+// drifts into denormals, which are slow on some CPUs.
+func flush(x float64) float64 {
+	if x > -1e-20 && x < 1e-20 {
+		return 0
+	}
+	return x
 }
