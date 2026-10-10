@@ -7,13 +7,15 @@ here, only its shape. Instruments are stacks of unit opcodes run by a tiny
 per-sample VM, a tracker-style sequencer drives them, and the whole track is
 derived from a seed.
 
-The module has three parts:
+The module has these parts:
 
 | Package | What it is |
 |---|---|
 | `engine` | The synth VM, the sequencer, a one-shot sfx voice pool, and the game-state → parameters derivation. Plain Go; imports nothing from let-go. |
 | `letgo` | The let-go binding: an `audio` namespace that drives the engine from lg code, plus `letgo/lg/ambience.lg`, the same derivation written in lg. |
+| `webaudio` | Browser output: an AudioWorklet fed in small slices from the page's event loop (see [In the browser](#in-the-browser)). |
 | `cmd/undertone` | A CLI that plays live, renders WAVs, and draws a four-band VU meter. |
+| [`examples/`](examples) | A step sequencer, the engine in a web page, and a let-go-driven game demo, each runnable in a browser. |
 
 `cmd/lghost` is a minimal lg runner with the binding linked in, for trying the
 namespace without lgx.
@@ -33,6 +35,14 @@ Music parameters come from game state:
 `Synth.SetParameters` stages a new parameter set and applies it at the next
 pattern boundary, so a change mid-playback is a seamless transition. Output is
 44.1 kHz 16-bit stereo through a cross-fed delay bus and a tanh soft clip.
+Out-of-range parameters are clamped rather than trusted, since they often come
+from lg code or a page.
+
+The sequencer is a 16-row tracker underneath. `Synth.SetGrid` hands it a
+written pattern (lead and bass lanes of scale degrees, a pulse lane) to play
+in place of the generated one, optionally over the generated drone, pad and
+air; `SeedGrid` derives a starting pattern from a seed. The
+[grid example](examples/grid) is a step sequencer built on it.
 
 One-shots run beside the sequencer in an 8-voice pool that the sequencer never
 sees, so a trigger cannot change the music's random streams. Patches:
@@ -122,9 +132,9 @@ port similar code to lg. First, lg's `*` raises on overflow, so seed mixing
 needs `unchecked-multiply`. Second, lg has no unsigned integer, so an unsigned
 remainder needs doing by hand (`ambience/umod`).
 
-## Keep the player reachable
+## Native playback: keep the player reachable
 
-oto attaches a cleanup to every `*oto.Player` that closes it once the handle
+Natively, playback goes through [oto](https://github.com/ebitengine/oto). oto attaches a cleanup to every `*oto.Player` that closes it once the handle
 is unreachable, and its internal mixer does not keep the handle alive
 ([ebitengine/oto#293](https://github.com/ebitengine/oto/issues/293)). A player
 held only in a local stops at the next GC, silently, with no error. Store the
@@ -133,19 +143,42 @@ result of `NewPlayer` in a struct field or a package-level variable, or call
 player in a field. `cmd/undertone/playerlifetime_test.go` parses every
 `NewPlayer` call site in the module and fails on one that does neither.
 
-## Latency
+## Native latency
 
-`engine.DeviceBuffer` and `engine.PlayerBuffer` replace oto's
-streaming-oriented defaults. On the measuring bench, tap-to-sound dropped from
-a median of about 820 ms to about 130 ms. The device buffer is kept at a
-power-of-two frame count, because oto's ScriptProcessorNode fallback (browsers
-without AudioWorklet) throws otherwise.
+`engine.DeviceBuffer` and `engine.PlayerBuffer` are what `letgo.Music` opens
+oto with, in place of its streaming-oriented defaults. On the measuring bench,
+tap-to-sound dropped from a median of about 820 ms to about 130 ms. The CLI
+keeps oto's deeper defaults, since a music bed has no one-shots waiting
+behind the read-ahead.
+
+## In the browser
+
+`letgo.Music` and `cmd/undertone` play through the `webaudio` package under
+`GOOS=js`, not oto. oto's browser backend renders a whole buffer inside the
+audio thread's refill deadline, and Go's wasm has one thread with no
+preemption, so on a phone the burst overran the deadline and crackled at every
+buffer size tried. `webaudio` decouples the two: an AudioWorklet only copies
+out of a ring, and a goroutine renders 512-frame slices within a 3 ms budget
+until about 300 ms is queued, then yields to the page. Where the page is
+cross-origin isolated the ring is a SharedArrayBuffer; elsewhere slices travel
+as transferred messages. Both played without a dropout on an iPhone, including
+under 120 ms main-thread stalls.
+
+Two things the page has to provide: HTTPS (or `localhost`), because Safari
+offers AudioWorklet only in a secure context; and a tap, because browsers
+start audio only from a user gesture. `webaudio.Open` listens for that tap
+itself.
+
+let-go itself may grow a host audio seam; see
+[nooga/let-go#255](https://github.com/nooga/let-go/issues/255).
 
 ## Building
 
 Builds need no cgo. `CGO_ENABLED=0` works for macOS, for Linux (PulseAudio
 through a pure-Go client, or ALSA loaded through purego), and for
-`GOOS=js GOARCH=wasm`. oto is pinned at v3.5.1.
+`GOOS=js GOARCH=wasm`. oto is pinned at v3.5.1 and is used only natively.
+The let-go binding avoids reflection-boxed natives, so it also runs under
+TinyGo.
 
 ## History
 

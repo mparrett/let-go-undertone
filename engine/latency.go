@@ -15,8 +15,10 @@ import "time"
 // sound is survivable, a sound whose delay changes every time cannot be
 // played around.
 //
-// These are the values every host opens its device with. They are a
-// trade-off, not a maximum: smaller buffers leave the renderer less slack
+// These are the values letgo.Music opens oto with natively. The CLI keeps
+// oto's defaults, since a music bed has nothing waiting behind the
+// read-ahead, and browsers play through the webaudio package, not oto. The
+// values are a trade-off, not a maximum: smaller buffers leave the renderer less slack
 // before an underrun, which is audible as a click — and in the game the same
 // main thread also draws the terminal. If dropouts appear, raise DeviceBuffer
 // first (in the power-of-two steps below), since it bounds how long the
