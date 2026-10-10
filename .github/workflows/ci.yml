@@ -41,3 +41,11 @@ jobs:
           CGO_ENABLED: "0"
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+      # The grid example's lg mutate button is an opt-in build.
+      - name: build the grid example with -tags lg
+        if: matrix.goos == 'js'
+        run: go build -tags lg ./examples/grid
+        env:
+          CGO_ENABLED: "0"
+          GOOS: js
+          GOARCH: wasm
