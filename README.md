@@ -7,6 +7,13 @@ here, only its shape. Instruments are stacks of unit opcodes run by a tiny
 per-sample VM, a tracker-style sequencer drives them, and the whole track is
 derived from a seed.
 
+**Try it in a browser: [matt.parrett.us/let-go-undertone](https://matt.parrett.us/let-go-undertone/)**
+(the [grid](https://matt.parrett.us/let-go-undertone/grid/), the
+[player](https://matt.parrett.us/let-go-undertone/player/), and a
+[let-go-driven descent](https://matt.parrett.us/let-go-undertone/descent/)).
+
+[![The grid example: a step sequencer playing over the engine's bed, with lg mutations and a mood change](docs/grid.gif)](https://matt.parrett.us/let-go-undertone/grid-lg/)
+
 The module has these parts:
 
 | Package | What it is |
