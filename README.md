@@ -91,7 +91,7 @@ so it needs `:go/version` and no `:go/interop`:
 
 ```clojure
 {:lg-runtime :built
- :lg-version "1.12.2"
+ :lg-version "1.13.0"
  :deps {github.com/mparrett/let-go-undertone/letgo {:go/version "main"}}}
 ```
 
