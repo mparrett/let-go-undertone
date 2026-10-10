@@ -146,7 +146,9 @@ func wait(a *arcState, run int32, d time.Duration) bool {
 	return a.run.Load() == run && a.get() != idle
 }
 
-const turnTime = 1800 * time.Millisecond
+// turnTime is the real time per game turn. It is close to a pattern's
+// length, so the music has time to answer one turn before the next arrives.
+const turnTime = 5400 * time.Millisecond
 
 func runArc(c *api.LetGo, m *letgo.Music, a *arcState, run int32) {
 	setText("status", "unlocking audio…")
@@ -181,12 +183,14 @@ func runArc(c *api.LetGo, m *letgo.Music, a *arcState, run int32) {
 		}
 		next, _ := c.Run(fmt.Sprintf("(demo/hit? %d)", i+1))
 		if i+1 < n && next == vm.TRUE {
-			// Count the next blow in across this turn's wait, so the ear
-			// knows when to listen for it.
-			third := turnTime / 3
+			// Count the next blow in over the last three seconds of this
+			// turn, so the ear knows when to listen for it.
+			if !wait(a, run, turnTime-3*time.Second) {
+				return
+			}
 			for k := 3; k >= 1; k-- {
 				setText("status", fmt.Sprintf("hit incoming… %d", k))
-				if !wait(a, run, third) {
+				if !wait(a, run, time.Second) {
 					return
 				}
 			}

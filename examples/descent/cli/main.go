@@ -52,7 +52,7 @@ func main() {
 	expr := flag.String("e", "", "lg expression to run after the namespace loads")
 	demo := flag.Bool("demo", false, "walk demo.lg's scripted descent-and-fight arc")
 	dry := flag.Bool("dry", false, "with -demo: print the tension trace, make no sound")
-	turnMS := flag.Int("turn-ms", 1500, "with -demo: real milliseconds per game turn")
+	turnMS := flag.Int("turn-ms", 4500, "with -demo: real milliseconds per game turn")
 	flag.Parse()
 
 	// The base params supply the patch palette and a lead default; the script
