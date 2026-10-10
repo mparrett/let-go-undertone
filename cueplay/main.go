@@ -161,6 +161,8 @@ var player *oto.Player
 func main() {
 	each := flag.Duration("each", 20*time.Second, "how long each cue plays before the next")
 	fade := flag.Duration("fade", 2*time.Second, "crossfade between cues")
+	render := flag.String("render", "", "write what would play to this WAV instead of the speakers")
+	length := flag.Duration("length", 90*time.Second, "with -render: how much to write")
 	flag.Parse()
 	if flag.NArg() < 2 {
 		fmt.Fprintln(os.Stderr, "usage: cueplay [-each 20s] [-fade 2s] DIR CUE [CUE...]")
@@ -175,6 +177,14 @@ func main() {
 			os.Exit(1)
 		}
 		cues = append(cues, c)
+	}
+
+	if *render != "" {
+		if err := renderWAV(*render, cues, *each, *fade, *length); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	}
 
 	ctx, ready, err := oto.NewContext(&oto.NewContextOptions{SampleRate: rate, ChannelCount: chans, Format: oto.FormatSignedInt16LE})
@@ -197,6 +207,39 @@ func main() {
 		}
 	}
 	select {} // the last cue loops until ctrl-c
+}
+
+// renderWAV runs the same mixer and cue schedule as live playback, pulling
+// samples the way oto would, and writes them to a 16-bit stereo WAV.
+func renderWAV(path string, cues []*cue, each, fade, length time.Duration) error {
+	m := &mixer{}
+	m.play(cues[0], 0)
+	total := int(length.Seconds()*rate) * 4
+	pcm := make([]byte, 0, total)
+	buf := make([]byte, 4096)
+	for next := 1; len(pcm) < total; {
+		// switch cues at the same moments live playback would
+		if next < len(cues) && len(pcm) >= int(float64(next)*each.Seconds()*rate)*4 {
+			m.play(cues[next], fade)
+			next++
+		}
+		n, _ := m.Read(buf[:min(len(buf), total-len(pcm))])
+		pcm = append(pcm, buf[:n]...)
+	}
+	h := make([]byte, 44)
+	copy(h, "RIFF")
+	binary.LittleEndian.PutUint32(h[4:], uint32(36+len(pcm)))
+	copy(h[8:], "WAVEfmt ")
+	binary.LittleEndian.PutUint32(h[16:], 16)
+	binary.LittleEndian.PutUint16(h[20:], 1)
+	binary.LittleEndian.PutUint16(h[22:], chans)
+	binary.LittleEndian.PutUint32(h[24:], rate)
+	binary.LittleEndian.PutUint32(h[28:], rate*chans*2)
+	binary.LittleEndian.PutUint16(h[32:], chans*2)
+	binary.LittleEndian.PutUint16(h[34:], 16)
+	copy(h[36:], "data")
+	binary.LittleEndian.PutUint32(h[40:], uint32(len(pcm)))
+	return os.WriteFile(path, append(h, pcm...), 0o644)
 }
 
 var _ io.Reader = (*mixer)(nil)
