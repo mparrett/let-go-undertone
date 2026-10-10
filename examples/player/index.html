@@ -54,11 +54,11 @@
   }
 
   const q = new URLSearchParams(location.search);
-  const depth = q.get("depth") ?? "0";
-  const seed = q.get("seed") ?? "1";
-  const tension = q.get("tension") ?? "0";
-  const mood = q.get("mood") ?? "dungeon";
-  const lead = q.get("lead") ?? "";
+  let depth = q.get("depth") ?? "0";
+  let seed = q.get("seed") ?? "1";
+  let tension = q.get("tension") ?? "0";
+  let mood = q.get("mood") ?? "dungeon";
+  let lead = q.get("lead") ?? "";
   const status = document.getElementById("status");
   const startBtn = document.getElementById("start");
 
@@ -122,16 +122,26 @@
     ["kalimba fields",  "?mood=overworld&depth=2&lead=kalimba"],
   ];
   const sc = document.getElementById("scenes");
+  const isCurrent = (p) => (p.get("mood") ?? "dungeon") === mood && (p.get("depth") ?? "0") === depth &&
+    (p.get("tension") ?? "0") === tension && (p.get("seed") ?? "1") === seed && (p.get("lead") ?? "") === lead;
   for (const [name, qs] of scenes) {
     const a = document.createElement("a");
     a.href = qs;
     a.textContent = name;
-    const p = new URLSearchParams(qs);
-    if ((p.get("mood") ?? "dungeon") === mood && (p.get("depth") ?? "0") === depth &&
-        (p.get("tension") ?? "0") === tension && (p.get("seed") ?? "1") === seed &&
-        (p.get("lead") ?? "") === lead) {
-      a.className = "active";
-    }
+    if (isCurrent(new URLSearchParams(qs))) a.className = "active";
+    // Switch in place: a reload would stop the sound, and iOS would want
+    // another tap to start it. Without the hook (wasm not running), navigate.
+    a.addEventListener("click", (e) => {
+      if (!window.undertoneScene) return;
+      e.preventDefault();
+      const p = new URLSearchParams(qs);
+      [mood, depth, seed, tension, lead] = [p.get("mood") ?? "dungeon", p.get("depth") ?? "0",
+        p.get("seed") ?? "1", p.get("tension") ?? "0", p.get("lead") ?? ""];
+      window.undertoneScene(qs);
+      history.replaceState(null, "", qs);
+      for (const x of sc.children) x.classList.toggle("active", x === a);
+      status.textContent = window.__undertoneAudio ? playing() : `${mood} ${depth}, seed ${seed}, tension ${tension}`;
+    });
     sc.appendChild(a);
   }
 

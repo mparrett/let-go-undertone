@@ -43,16 +43,7 @@ func main() {
 	if level < 0 { // signed-depth sugar: -3 means overworld elevation 3
 		*mood, level = "overworld", -level
 	}
-	var p engine.Params
-	switch *mood {
-	case "overworld":
-		p = engine.DeriveOverworld(*seed, level, *tension)
-	default:
-		p = engine.DeriveDungeon(*seed, level, *tension)
-	}
-	if *lead != "" {
-		engine.ApplyLead(&p, *lead)
-	}
+	p := deriveParams(*mood, *seed, level, *tension, *lead)
 	s := engine.NewSynth(p)
 	desc := fmt.Sprintf("mood=%s seed=%d level=%d tension=%.2f lead=%s bpm=%.0f root=%d", *mood, *seed, level, *tension, p.LeadName, p.BPM, p.Root)
 	switch {
@@ -73,4 +64,20 @@ func main() {
 	default:
 		flag.Usage()
 	}
+}
+
+// deriveParams turns the CLI's scene description into engine parameters. The
+// browser build also calls it when the page switches scenes (play_js.go).
+func deriveParams(mood string, seed uint64, level int, tension float64, lead string) engine.Params {
+	var p engine.Params
+	switch mood {
+	case "overworld":
+		p = engine.DeriveOverworld(seed, level, tension)
+	default:
+		p = engine.DeriveDungeon(seed, level, tension)
+	}
+	if lead != "" {
+		engine.ApplyLead(&p, lead)
+	}
+	return p
 }
