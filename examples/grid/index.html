@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Undertone Grid</title>
+<style>
+  :root {
+    --bg: #0d0d10; --panel: #15151a; --line: #26262e; --fg: #d6d1c2; --mut: #8a8576;
+    --lead: #e0b84f; --bass: #5fa8c9; --pulse: #c96a5f; --head: #ffffff14;
+    /* phones: as wide as the screen allows */
+    --cell: clamp(17px, calc((100vw - 32px - 28px - 3 * 6px) / 16), 40px);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg);
+         font: 15px/1.45 ui-monospace, Menlo, monospace; }
+  main { max-width: calc(28px + 16 * var(--cell) + 3 * 6px); margin: 0 auto; }
+  .bed.on { color: var(--fg); border-color: var(--mut); background: #22222a; }
+  h1 { font-size: 14px; letter-spacing: .2em; color: var(--mut); margin: 0 0 10px; font-weight: 600; }
+  #status { color: var(--mut); min-height: 1.45em; margin-bottom: 10px; font-size: 13px; }
+
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+  button, .chip { font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--line);
+                  border-radius: 8px; padding: 8px 12px; cursor: pointer; }
+  button:active { transform: translateY(1px); }
+  #play { min-width: 6.5em; font-size: 16px; border-color: #3d5a47; background: #18241d; }
+  #play.on { border-color: var(--lead); background: #2a2414; }
+  .chip { padding: 5px 10px; font-size: 13px; color: var(--mut); }
+  .chip.on { color: var(--fg); border-color: var(--mut); background: #22222a; }
+  label.tempo { display: flex; align-items: center; gap: 8px; flex: 1; min-width: 180px; font-size: 13px; color: var(--mut); }
+  label.tempo input { flex: 1; accent-color: var(--lead); }
+  #bpmv { color: var(--fg); min-width: 3ch; text-align: right; }
+
+  .lane { margin: 12px 0 4px; font-size: 12px; color: var(--mut); letter-spacing: .1em; }
+  /* the first step of each beat after the first is 6px wider, padded on the left: beat groups */
+  .grid { --C: calc(var(--cell) + 6px); display: grid; row-gap: 2px;
+          grid-template-columns: 28px var(--cell) var(--cell) var(--cell) var(--cell)
+            var(--C) var(--cell) var(--cell) var(--cell) var(--C) var(--cell) var(--cell) var(--cell)
+            var(--C) var(--cell) var(--cell) var(--cell);
+          touch-action: pan-y; /* vertical drags scroll the page; drags along a lane paint */
+          user-select: none; -webkit-user-select: none; }
+  .lbl { font-size: 11px; color: var(--mut); display: flex; align-items: center; justify-content: flex-end;
+         padding-right: 6px; height: var(--cell); }
+  .c { height: var(--cell); padding: 1px; cursor: pointer; }
+  .c::after { content: ""; display: block; height: 100%; border-radius: 3px; background: var(--panel);
+              border: 1px solid var(--line); }
+  .c.g4 { padding-left: 7px; }
+  .c.head::after { background: #23232b; }
+  .lead .c.on::after { background: var(--lead); border-color: var(--lead); }
+  .bass .c.on::after { background: var(--bass); border-color: var(--bass); }
+  .pulse .c.on::after { background: var(--pulse); border-color: var(--pulse); }
+  .c.on.head::after { filter: brightness(1.35); }
+  .lead .tonic::after, .bass .tonic::after { border-color: #3a3a46; }
+
+  footer { margin: 4px 0 10px; font-size: 12px; color: var(--mut); }
+  @media (max-width: 899px) { footer { order: 9; } aside { display: contents; } main { display: flex; flex-direction: column; } section { order: 5; } }
+  footer a { color: var(--mut); }
+  /* wide screens: controls beside the grid, and cells sized so all 17 rows
+     fit the window's height without scrolling */
+  @media (min-width: 900px) {
+    :root { --cell: clamp(20px, calc((100dvh - 150px) / 17 - 2px), 46px); }
+    body { padding: 32px; }
+    main { max-width: none; display: grid; grid-template-columns: 250px auto; gap: 40px; justify-content: center; align-items: start; }
+    .lbl { font-size: 12px; }
+    .lane:first-child { margin-top: 0; }
+  }
+</style>
+</head>
+<body>
+<main>
+ <aside>
+  <h1>UNDERTONE · GRID</h1>
+  <div id="status">loading…</div>
+
+  <div class="bar">
+    <button id="play" disabled>&#9654; play</button>
+    <label class="tempo">tempo <input id="bpm" type="range" min="60" max="160" step="1" value="110"><span id="bpmv">110</span></label>
+  </div>
+  <div class="bar" id="moods"></div>
+  <div class="bar" id="voices"></div>
+  <div class="bar">
+    <button id="dice" title="a new starting pattern from the next seed">&#8635; new</button>
+    <button id="clear">clear</button>
+    <button class="bed" id="bed" title="the generator's drone, pad and air under the grid">bed</button>
+    <button id="share">copy link</button>
+  </div>
+  <footer>Tap a cell to place a note, tap it again to clear; drag to paint. One note per step in each lane.
+    Rows are scale degrees, so the pattern stays in key when the mood changes.
+    Space plays and stops on a keyboard. Edits are heard the next time the playhead passes them.</footer>
+ </aside>
+ <section>
+
+  <div class="lane">LEAD</div>
+  <div class="grid lead" id="lead"></div>
+  <div class="lane">BASS</div>
+  <div class="grid bass" id="bass"></div>
+  <div class="lane">PULSE</div>
+  <div class="grid pulse" id="pulse"></div>
+
+ </section>
+</main>
+
+<script src="wasm_exec.js"></script>
+<script>
+  const STEPS = 16, DEG = 8;
+  const MOODS = ["overworld", "dungeon"];
+  const VOICES = ["kalimba", "bell", "chime", "pluck", "reed", "clang"];
+  const $ = (id) => document.getElementById(id);
+  const status = $("status");
+
+  // State lives here; the wasm side only hears about changes.
+  let st = { bpm: 110, mood: "overworld", voice: "kalimba", seed: 1, bed: true,
+             lead: Array(STEPS).fill(0), bass: Array(STEPS).fill(0), pulse: Array(STEPS).fill(false) };
+  let playing = false, ready = false;
+
+  // ---- share links: #v1;t=110;m=o;v=kalimba;s=1;bed=1;L=...;B=...;P=hex ----
+  function encode() {
+    const pulse = st.pulse.reduce((n, on, i) => n | (on ? 1 << i : 0), 0);
+    return `#v1;t=${st.bpm};m=${st.mood[0]};v=${st.voice};s=${st.seed};bed=${+st.bed};` +
+           `L=${st.lead.join("")};B=${st.bass.join("")};P=${pulse.toString(16)}`;
+  }
+  function decode(h) {
+    if (!h.startsWith("#v1;")) return false;
+    const kv = Object.fromEntries(h.slice(4).split(";").map((s) => s.split("=")));
+    const digits = (s) => s && s.length === STEPS && /^[0-8]+$/.test(s) ? [...s].map(Number) : null;
+    const L = digits(kv.L), B = digits(kv.B);
+    if (!L || !B) return false;
+    const p = parseInt(kv.P || "0", 16);
+    st = { ...st, lead: L, bass: B, pulse: [...Array(STEPS)].map((_, i) => !!(p & (1 << i))),
+           bpm: Math.min(160, Math.max(60, +kv.t || 110)), mood: kv.m === "d" ? "dungeon" : "overworld",
+           voice: VOICES.includes(kv.v) ? kv.v : "kalimba", seed: +kv.s || 1, bed: kv.bed !== "0" };
+    return true;
+  }
+
+  // ---- the grid ----
+  function build(id, rows) {
+    const el = $(id); el.innerHTML = "";
+    for (let r = rows; r >= 1; r--) { // highest degree on top
+      const lbl = document.createElement("div"); lbl.className = "lbl";
+      lbl.textContent = id === "pulse" ? "" : r; el.appendChild(lbl);
+      for (let s = 0; s < STEPS; s++) {
+        const c = document.createElement("div");
+        c.className = "c" + (s && s % 4 === 0 ? " g4" : "") + ((r === 1 || r === 8) && id !== "pulse" ? " tonic" : "");
+        c.dataset.lane = id; c.dataset.step = s; c.dataset.deg = r;
+        el.appendChild(c);
+      }
+    }
+  }
+  build("lead", DEG); build("bass", DEG); build("pulse", 1);
+
+  function paint() {
+    for (const c of document.querySelectorAll(".c")) {
+      const s = +c.dataset.step, lane = c.dataset.lane;
+      const on = lane === "pulse" ? st.pulse[s] : st[lane][s] === +c.dataset.deg;
+      c.classList.toggle("on", on);
+    }
+    for (const b of document.querySelectorAll("#moods .chip")) b.classList.toggle("on", b.dataset.v === st.mood);
+    for (const b of document.querySelectorAll("#voices .chip")) b.classList.toggle("on", b.dataset.v === st.voice);
+    $("bed").classList.toggle("on", st.bed);
+    $("bpm").value = st.bpm; $("bpmv").textContent = st.bpm;
+  }
+
+  const pushGrid = () => {
+    if (ready) undertoneGrid.setGrid(JSON.stringify({ lead: st.lead, bass: st.bass, pulse: st.pulse, bed: st.bed }));
+    history.replaceState(null, "", encode());
+  };
+  const pushParams = () => {
+    if (ready) undertoneGrid.setParams(JSON.stringify({ bpm: st.bpm, mood: st.mood, voice: st.voice, seed: st.seed }));
+    history.replaceState(null, "", encode());
+  };
+
+  // One handler for every cell (pointerdown: no 300 ms click delay, and
+  // dragging across a lane paints notes).
+  let painting = null;
+  function cellAt(e) { const t = document.elementFromPoint(e.clientX, e.clientY); return t && t.classList.contains("c") ? t : null; }
+  function toggle(c, mode) {
+    const s = +c.dataset.step, lane = c.dataset.lane, d = +c.dataset.deg;
+    if (lane === "pulse") {
+      const v = mode ?? !st.pulse[s]; st.pulse[s] = v; return v;
+    }
+    const v = mode ?? st[lane][s] !== d;
+    st[lane][s] = v ? d : (st[lane][s] === d ? 0 : st[lane][s]);
+    return v;
+  }
+  document.addEventListener("pointerdown", (e) => {
+    const c = cellAt(e); if (!c) return;
+    e.preventDefault();
+    painting = { mode: toggle(c, null), lane: c.dataset.lane, last: c };
+    paint(); pushGrid();
+  });
+  document.addEventListener("pointermove", (e) => {
+    if (!painting) return;
+    const c = cellAt(e);
+    if (!c || c === painting.last || c.dataset.lane !== painting.lane) return;
+    painting.last = c; toggle(c, painting.mode); paint(); pushGrid();
+  });
+  addEventListener("pointerup", () => { painting = null; });
+  addEventListener("pointercancel", () => { painting = null; });
+
+  // ---- controls ----
+  for (const [box, list, key] of [["moods", MOODS, "mood"], ["voices", VOICES, "voice"]]) {
+    for (const v of list) {
+      const b = document.createElement("span"); b.className = "chip"; b.textContent = v; b.dataset.v = v;
+      b.onclick = () => { st[key] = v; paint(); pushParams(); };
+      $(box).appendChild(b);
+    }
+  }
+  $("bpm").oninput = (e) => { st.bpm = +e.target.value; $("bpmv").textContent = st.bpm; pushParams(); };
+  $("bed").onclick = () => { st.bed = !st.bed; paint(); pushGrid(); };
+  $("clear").onclick = () => { st.lead.fill(0); st.bass.fill(0); st.pulse.fill(false); paint(); pushGrid(); };
+  $("dice").onclick = () => {
+    if (!ready) return;
+    st.seed = (st.seed % 999) + 1;
+    pushParams(); // the seed also picks the bed's patterns
+    const g = JSON.parse(undertoneGrid.seedGrid(st.seed));
+    st.lead = g.lead; st.bass = g.bass; st.pulse = g.pulse;
+    paint(); pushGrid();
+    status.textContent = `seed ${st.seed}`;
+  };
+  $("share").onclick = async () => {
+    history.replaceState(null, "", encode());
+    try { await navigator.clipboard.writeText(location.href); status.textContent = "link copied"; }
+    catch { status.textContent = "copy the address bar to share this pattern"; }
+  };
+
+  function setPlaying(on) {
+    playing = on;
+    // Called straight from the tap: iOS resumes audio only inside a gesture.
+    on ? undertoneGrid.play() : undertoneGrid.stop();
+    $("play").classList.toggle("on", on);
+    $("play").innerHTML = on ? "&#10074;&#10074; stop" : "&#9654; play";
+    status.textContent = on ? `playing at ${st.bpm} bpm` : "stopped";
+  }
+  $("play").onclick = () => setPlaying(!playing);
+  addEventListener("keydown", (e) => {
+    if (e.code === "Space" && ready && e.target.tagName !== "INPUT") { e.preventDefault(); setPlaying(!playing); }
+  });
+
+  // ---- playhead ----
+  let lastRow = -2;
+  (function head() {
+    const r = ready && playing ? undertoneGrid.row() : -1;
+    if (r !== lastRow) {
+      for (const c of document.querySelectorAll(".c.head")) c.classList.remove("head");
+      if (r >= 0) for (const c of document.querySelectorAll(`.c[data-step="${r}"]`)) c.classList.add("head");
+      lastRow = r;
+    }
+    requestAnimationFrame(head);
+  })();
+
+  // ---- boot ----
+  window.undertoneGridFailed = (msg) => { status.textContent = "audio failed: " + msg; };
+  window.undertoneGridReady = () => {
+    ready = true;
+    if (!decode(location.hash)) {
+      const g = JSON.parse(undertoneGrid.initial);
+      st.lead = g.lead; st.bass = g.bass; st.pulse = g.pulse;
+    }
+    paint(); pushParams(); pushGrid();
+    $("play").disabled = false;
+    status.textContent = "ready: tap play";
+  };
+  paint();
+  const go = new Go();
+  WebAssembly.instantiateStreaming(fetch("main.wasm", { cache: "no-cache" }), go.importObject)
+    .then((r) => go.run(r.instance))
+    .catch((e) => { status.textContent = "wasm failed: " + e; });
+</script>
+</body>
+</html>
