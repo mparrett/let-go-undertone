@@ -99,3 +99,11 @@ func TestSetParametersAppliesAtPatternBoundary(t *testing.T) {
 			s.params.BPM, next.BPM)
 	}
 }
+
+func TestEveryLeadHasATrim(t *testing.T) {
+	for name := range leadLib {
+		if leadTrim[name] <= 0 {
+			t.Errorf("lead %q has no leadTrim entry, so the generator would play it silent", name)
+		}
+	}
+}

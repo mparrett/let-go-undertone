@@ -417,6 +417,14 @@ var leadLib = map[string]leadDef{
 	"pluck":   {"pluck", pluck, 1},
 }
 
+// leadTrim scales a lead voice in the generator's mix, so a quiet patch is
+// not lost under the bed. Chosen by ear on the lead-level tuner (2026-10-10):
+// the pluck sat about 23 dB under the bell at equal gain and is raised 10 dB.
+// A voice missing here plays at 0, so every lead needs an entry.
+var leadTrim = map[string]float64{
+	"bell": 1, "chime": 1, "clang": 1, "kalimba": 1, "reed": 1, "pluck": 3.162,
+}
+
 // mood-weighted audition lists; the seed picks (kaiju trick applied to
 // timbre: two seeds differ in instrument, not just notes)
 var dungeonLeads = []string{"bell", "chime", "chime", "clang", "kalimba", "pluck", "pluck"}
@@ -576,7 +584,7 @@ func buildPatterns(p Params, pat int) [nTracks][rows]trackRow {
 		if r.f() < p.BellDensity {
 			deg += r.n(5) - 2
 			deg = max(3, min(deg, 17))
-			out[3][i] = trackRow{chord + 12*(deg/7) + p.Scale[deg%7] + p.BellLift, 0.55, p.LeadGate, p.Palette.Bell}
+			out[3][i] = trackRow{chord + 12*(deg/7) + p.Scale[deg%7] + p.BellLift, 0.55 * leadTrim[p.LeadName], p.LeadGate, p.Palette.Bell}
 		}
 	}
 	if pat%2 == 0 {
