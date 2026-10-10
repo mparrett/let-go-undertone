@@ -564,6 +564,13 @@ type Synth struct {
 	mlp  [3]float64 // one-pole states at the band edges
 	menv [4]float64 // per-band peak envelopes (attack instant, slow decay)
 	mout [4]uint64  // envelopes published as float bits for cross-goroutine reads
+
+	// hand-written pattern (grid.go): nil plays the generator alone
+	grid   atomic.Pointer[Grid]
+	now    atomic.Pointer[Params] // staged for the next row (SetParametersNow)
+	nframe int64                  // frames rendered, synthesis-side
+	frames atomic.Int64           // nframe as of the end of the last Read
+	rowLog rowLog
 }
 
 // band-edge one-pole coefficients (120/350/1200 Hz) and ~400ms decay
@@ -617,6 +624,13 @@ func NewSynth(p Params) *Synth {
 // pattern boundary (the audio/set-parameters contract).
 func (s *Synth) SetParameters(p Params) { s.next = &p }
 
+// SetParametersNow stages p for the next row instead of the next pattern:
+// for an editor, where a tempo or voice change should be heard at once. The
+// generator's notes for the rest of this pattern were already drawn from the
+// old parameters, so only tempo and the voices of new notes change mid-way.
+// Safe to call from any goroutine.
+func (s *Synth) SetParametersNow(p Params) { s.now.Store(&p) }
+
 func (s *Synth) apply(p Params) {
 	s.params = p
 	s.samplesPerRow = int(SampleRate * 60 / (p.BPM * 2)) // 2 rows per beat: ambient rows are long
@@ -627,6 +641,9 @@ func (s *Synth) apply(p Params) {
 }
 
 func (s *Synth) step() {
+	if p := s.now.Swap(nil); p != nil {
+		s.apply(*p)
+	}
 	if s.row == 0 {
 		if s.next != nil {
 			s.apply(*s.next)
@@ -634,6 +651,10 @@ func (s *Synth) step() {
 		}
 		s.pats = buildPatterns(s.params, s.pat)
 	}
+	if g := s.grid.Load(); g != nil {
+		s.applyGrid(g, s.row)
+	}
+	s.rowLog.add(s.nframe, s.row)
 	for t := 0; t < nTracks; t++ {
 		v := &s.voices[t]
 		if tr := s.pats[t][s.row]; tr.note != 0 {
@@ -658,6 +679,7 @@ func (s *Synth) frame() (int16, int16) {
 		s.rowLeft = s.samplesPerRow
 	}
 	s.rowLeft--
+	s.nframe++
 	var l, r float64
 	s.dbus = 0
 	for i := range s.voices {
@@ -685,6 +707,7 @@ func (s *Synth) Read(p []byte) (int, error) {
 		binary.LittleEndian.PutUint16(p[i:], uint16(l))
 		binary.LittleEndian.PutUint16(p[i+2:], uint16(r))
 	}
+	s.frames.Store(s.nframe)
 	return n, nil
 }
 
