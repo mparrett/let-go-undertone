@@ -1,3 +1,0 @@
-# build products: GOOS=js go build output + the wasm_exec.js copied from GOROOT
-main.wasm
-wasm_exec.js

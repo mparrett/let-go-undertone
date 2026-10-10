@@ -27,8 +27,7 @@ import (
 // keeps it alive explicitly. Files are parsed directly rather than type-checked,
 // so js-only front ends are covered by a test that runs natively — which is the
 // point, since the one that broke was the js one. The walk starts at the module
-// root, not this package, because NewPlayer callers live in several packages
-// (and in _moving/, which the go tool skips but this parse does not).
+// root, not this package, because NewPlayer callers live in several packages.
 func TestNewPlayerResultOutlivesItsScope(t *testing.T) {
 	root, err := moduleRoot()
 	if err != nil {
