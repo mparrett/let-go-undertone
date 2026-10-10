@@ -152,6 +152,14 @@ through a pure-Go client, or ALSA loaded through purego), and for
 Extracted on 2026-10-09 from a private workspace, where it began as
 `sointu-homage` on 2026-08-14. The commit history is preserved.
 
+## Thanks
+
+To [jasalt](https://github.com/jasalt), whose
+[govertone](https://github.com/jasalt/govertone), an experiment pairing Sointu
+with let-go shared in the Clojurians Slack `#let-go` channel in July 2026,
+introduced Sointu to this project and prompted it. And to
+[vsariola](https://github.com/vsariola) for Sointu itself.
+
 ## License
 
 MIT; see [LICENSE](LICENSE).
