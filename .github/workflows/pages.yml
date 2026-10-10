@@ -1,0 +1,58 @@
+name: pages
+
+# Builds the browser examples and publishes them to GitHub Pages.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: "0"
+      GOOS: js
+      GOARCH: wasm
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: build the demos
+        run: |
+          set -eu
+          site=_site
+          mkdir -p "$site"
+          cp examples/pages/index.html "$site/"
+          demo() { # demo <dir> <page source> <go build args...>
+            out="$site/$1"; page="$2"; shift 2
+            mkdir -p "$out"
+            go build -o "$out/main.wasm" "$@"
+            cp "$page/index.html" "$out/"
+            cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" "$out/"
+          }
+          demo grid examples/grid ./examples/grid
+          demo grid-lg examples/grid -tags lg ./examples/grid
+          demo player examples/player ./cmd/undertone
+          demo descent examples/descent/web ./examples/descent/web
+          ls -lh "$site"/*/main.wasm
+      - uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Undertone Demos</title>
+<style>
+  :root { --bg: #0d0d10; --panel: #15151a; --line: #26262e; --fg: #d6d1c2; --mut: #8a8576; --lead: #e0b84f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px 40px; background: var(--bg); color: var(--fg);
+         font: 15px/1.5 ui-monospace, Menlo, monospace; }
+  main { max-width: 40em; margin: 0 auto; }
+  h1 { font-size: 14px; letter-spacing: .2em; color: var(--mut); margin: 0 0 6px; font-weight: 600; }
+  p { color: var(--mut); margin: 0 0 18px; }
+  a { color: var(--fg); }
+  .demo { display: block; text-decoration: none; background: var(--panel); border: 1px solid var(--line);
+          border-radius: 10px; padding: 14px 16px; margin-bottom: 12px; }
+  .demo:hover { border-color: var(--mut); }
+  .demo b { color: var(--lead); font-weight: 600; }
+  .demo span { display: block; color: var(--mut); font-size: 13px; margin-top: 4px; }
+  footer { margin-top: 24px; font-size: 13px; color: var(--mut); }
+</style>
+</head>
+<body>
+<main>
+  <h1>UNDERTONE</h1>
+  <p>Generative game music in Go, played in the browser through an AudioWorklet. Tap to start audio. Headphones help with the low end.</p>
+  <a class="demo" href="grid/"><b>grid</b><span>A step sequencer on the engine: lead, bass and pulse lanes over the generated bed. A link carries the pattern. About 5 MB.</span></a>
+  <a class="demo" href="grid-lg/"><b>grid + lg</b><span>The same grid with a mutate button whose variations are written in let-go. About 28 MB, most of it let-go's runtime.</span></a>
+  <a class="demo" href="player/"><b>player</b><span>The engine alone, generative, with a four-band meter. Scenes for dungeon and overworld at several depths. About 3 MB.</span></a>
+  <a class="demo" href="descent/"><b>descent</b><span>let-go driving the engine: lg code turns a scripted descent and fight into music parameters and sound cues. About 29 MB.</span></a>
+  <footer>Source: <a href="https://github.com/mparrett/let-go-undertone">github.com/mparrett/let-go-undertone</a></footer>
+</main>
+</body>
+</html>

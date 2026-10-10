@@ -1,11 +1,14 @@
 # Examples
 
-Three ways in. Browser pages need HTTPS or `localhost`, since Safari only
-offers AudioWorklet in a secure context; tap to start audio.
+Three ways in, all live at
+[matt.parrett.us/let-go-undertone](https://matt.parrett.us/let-go-undertone/),
+which `.github/workflows/pages.yml` rebuilds on every push to `main`.
+Browser pages need HTTPS or `localhost`, since Safari only offers
+AudioWorklet in a secure context; tap to start audio.
 
 | Example | What it shows | Size (wasm) |
 |---|---|---|
-| [`grid/`](grid) | A step sequencer on the engine: lead, bass and pulse lanes over the generated bed. A link carries the pattern. Built with `-tags lg`, it adds a mutate button whose variations are lg code ([`grid/lgmutate/mutate.lg`](grid/lgmutate/mutate.lg)). | ~5 MB; ~28 MB with lg |
+| [`grid/`](grid) | A step sequencer on the engine: lead, bass and pulse lanes over the generated bed, in three moods (overworld, ruins, dungeon). A link carries the pattern. Built with `-tags lg`, it adds a mutate button whose variations are lg code ([`grid/lgmutate/mutate.lg`](grid/lgmutate/mutate.lg)). | ~5 MB; ~28 MB with lg |
 | [`player/`](player) | The engine alone, generative, with a four-band meter and query-string controls (`?depth=4&tension=0.6&seed=7&lead=pluck`). | ~3 MB |
 | [`descent/`](descent) | let-go driving the engine: lg code derives music parameters and sound-effect triggers from a scripted descent-and-fight, natively (`cli/`) and in the browser (`web/`). | ~29 MB |
 
