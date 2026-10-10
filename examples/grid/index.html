@@ -24,6 +24,7 @@
                   border-radius: 8px; padding: 8px 12px; cursor: pointer; }
   button:active { transform: translateY(1px); }
   #play { min-width: 6.5em; font-size: 16px; border-color: #3d5a47; background: #18241d; }
+  #play:disabled { border-color: var(--line); background: var(--panel); color: var(--mut); }
   #play.on { border-color: var(--lead); background: #2a2414; }
   .chip { padding: 5px 10px; font-size: 13px; color: var(--mut); }
   .chip.on { color: var(--fg); border-color: var(--mut); background: #22222a; }
@@ -55,6 +56,9 @@
   .c.on.head::after { filter: brightness(1.35); }
   .lead .tonic::after, .bass .tonic::after { border-color: #3a3a46; }
 
+  /* until the engine is ready, everything but the play button is dimmed and inert */
+  main.loading .grid, main.loading .lane, main.loading .bar .chip, main.loading .bar button:not(#play),
+  main.loading .bar label { opacity: .35; pointer-events: none; transition: opacity .3s; }
   footer { margin: 4px 0 10px; font-size: 12px; color: var(--mut); }
   @media (max-width: 899px) { footer { order: 9; } aside { display: contents; } main { display: flex; flex-direction: column; } section { order: 5; } }
   footer a { color: var(--mut); }
@@ -70,13 +74,13 @@
 </style>
 </head>
 <body>
-<main>
+<main class="loading">
  <aside>
   <h1>UNDERTONE · GRID</h1>
-  <div id="status">loading…</div>
+  <div id="status">loading the engine…</div>
 
   <div class="bar">
-    <button id="play" disabled>&#9654; play</button>
+    <button id="play" disabled>loading…</button>
     <label class="tempo">tempo <input id="bpm" type="range" min="60" max="160" step="1" value="110"><span id="bpmv">110</span></label>
   </div>
   <div class="bar" id="moods"><span class="lab">mood:</span></div>
@@ -284,6 +288,8 @@
     }
     paint(); pushParams(); pushGrid();
     $("play").disabled = false;
+    $("play").innerHTML = "&#9654; play";
+    document.querySelector("main").classList.remove("loading");
     $("mutate").hidden = !undertoneGrid.mutate;
     status.textContent = "ready: tap play";
   };
