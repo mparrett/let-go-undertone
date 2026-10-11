@@ -93,6 +93,15 @@ var moods = []mood{
 		palette:  overworldPalette,
 		leads:    meadowLeads,
 	},
+	// Candidates for later moods, on the dark-to-bright axis:
+	//   - Past dungeon, darker (Void, Below or Hades): lower and slower
+	//     than depth reaches today, perhaps with a new low patch.
+	//   - Past meadow, brighter (Aurora or Stratosphere): bright by being
+	//     thin rather than warm: high, slow, lydian, long reverb, almost no
+	//     rhythm.
+	// Two things the table cannot express yet: pentatonic scales (the
+	// sequencer and grid assume seven degrees) and moods that want their own
+	// rhythm, such as a village (the six tracks are fixed).
 }
 
 // MoodNames lists the moods DeriveMood knows, darkest first.
