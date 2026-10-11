@@ -407,32 +407,35 @@ var kick = Patch{
 	{opOut, [4]float64{0.5, 0.5}},
 }
 
-// clap: three or four quick re-hits (noise under a 50 Hz sine, which peaks
-// every 10 ms) for the first 30 ms, then a longer noise tail for body, over a
-// short swept sine. Closer to a frame drum than a backbeat snare.
+// clap: three or four quick re-hits (noise under a squared 50 Hz sine, which
+// peaks every 10 ms and falls silent between) for the first 30 ms, then a
+// noise tail and a short swept sine that both swell in after them.
+// Closer to a frame drum than a backbeat snare.
 var clap = Patch{
 	{opEnv, [4]float64{0.001, 0.025, 0, 0.01}},
 	{opOsc, [4]float64{0, shpNoise, 0, 1}},
 	{opMul, [4]float64{}},
 	{opOsc, [4]float64{-21.65, shpSine, 0, 1}}, // 50 Hz from the clap's note
 	{opMul, [4]float64{}},
+	{opOsc, [4]float64{-21.65, shpSine, 0, 1}}, // twice: sin² keeps the bursts apart
+	{opMul, [4]float64{}},
 	{opHpf, [4]float64{900, 0, 0, 0}},
-	{opOut, [4]float64{0.9, 0.42}},
-	{opEnv, [4]float64{0.008, 0.16, 0, 0.08}},
+	{opOut, [4]float64{1.1, 0.42}},
+	{opEnv, [4]float64{0.05, 0.16, 0, 0.08}},
 	{opOsc, [4]float64{0, shpNoise, 0, 1}},
 	{opMul, [4]float64{}},
 	{opHpf, [4]float64{1000, 0, 0, 0}},
 	{opLpf, [4]float64{6000, 0, 0, 0}},
 	{opSend, [4]float64{0.15, 0, 0, 0}},
 	{opOut, [4]float64{0.6, 0.42}},
-	{opEnv, [4]float64{0.001, 0.07, 0, 0.04}},
+	{opEnv, [4]float64{0.04, 0.07, 0, 0.04}},
 	{opOsc, [4]float64{0, shpSine, 7, 0.02}},
 	{opMul, [4]float64{}},
 	{opOut, [4]float64{0.45, 0.45}},
 }
 
-// shaker: noise band-passed to about 4-9 kHz. Highpassing alone is not
-// enough: white noise puts most of its energy in the top octaves, so without
+// shaker: noise band-passed to about 4-8 kHz, 24 dB/octave on the top side
+// (four one-pole lowpasses). Highpassing alone is not enough: white noise puts most of its energy in the top octaves, so without
 // the lowpasses it is a hiss centred near 14 kHz.
 var shaker = Patch{
 	{opEnv, [4]float64{0.004, 0.035, 0, 0.025}},
@@ -440,9 +443,11 @@ var shaker = Patch{
 	{opMul, [4]float64{}},
 	{opHpf, [4]float64{4000, 0, 0, 0}},
 	{opHpf, [4]float64{4000, 0, 0, 0}},
-	{opLpf, [4]float64{7000, 0, 0, 0}},
-	{opLpf, [4]float64{7000, 0, 0, 0}},
-	{opOut, [4]float64{1.2, 0.62}},
+	{opLpf, [4]float64{8000, 0, 0, 0}},
+	{opLpf, [4]float64{8000, 0, 0, 0}},
+	{opLpf, [4]float64{8000, 0, 0, 0}},
+	{opLpf, [4]float64{8000, 0, 0, 0}},
+	{opOut, [4]float64{1.7, 0.62}},
 }
 
 // tension pulse: a soft swept-sine tom, descendant of the techno kick
