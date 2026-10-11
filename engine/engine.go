@@ -475,67 +475,6 @@ func tenseOffset(calm int, t float64) int {
 	return calm
 }
 
-// DeriveDungeon maps game state to music. Depth darkens (where you are);
-// tension 0..1 agitates (what's happening): tempo up, pulse in, the second
-// drone slides fifth -> tritone -> minor ninth, calm layers thin out.
-// tension 0 reproduces the pre-tension output exactly (no extra rng draws).
-func DeriveDungeon(seed uint64, depth int, tension float64) Params {
-	r := rng{seed ^ uint64(depth)*0x9e3779b97f4a7c15 | 1}
-	d := float64(depth)
-	t := math.Max(0, math.Min(1, tension))
-	darkness := depth / 2
-	if darkness >= len(scalesByDarkness) {
-		darkness = len(scalesByDarkness) - 1
-	}
-	p := Params{
-		BPM:         math.Max(46, 66-float64(3*d)) + float64(r.n(5)) + float64(30*t),
-		Root:        57 - depth + []int{-2, 0, 0, 3}[r.n(4)],
-		Scale:       scalesByDarkness[darkness],
-		DroneGain:   math.Min(0.9, 0.55+float64(0.06*d)),
-		FifthGain:   math.Min(0.7, 0.2*d) + float64(0.25*t),
-		PadDensity:  (0.6 - float64(0.05*d)) * (1 - float64(0.6*t)),
-		BellDensity: math.Max(0.04, 0.16-float64(0.02*d)) * (1 - float64(0.5*t)),
-		AirGain:     math.Min(0.6, 0.25+float64(0.05*d)) + float64(0.1*t),
-		PulseGain:   t,
-		FifthOffset: tenseOffset(-5, t), // perfect fifth above the low drone
-		Palette:     dungeonPalette,
-		Seed:        seed,
-	}
-	pickLead(&p, dungeonLeads)
-	return p
-}
-
-// DeriveOverworld is the bright mirror: elevation raises and opens
-// (mixolydian -> major -> lydian, higher root, denser lifted bells,
-// breeze instead of rumble); tension works unchanged — brightness
-// collapsing into the same tritone/minor-ninth dread.
-func DeriveOverworld(seed uint64, elevation int, tension float64) Params {
-	r := rng{seed ^ uint64(elevation)*0x9e3779b97f4a7c15 | 1}
-	e := float64(elevation)
-	t := math.Max(0, math.Min(1, tension))
-	brightness := elevation / 2
-	if brightness >= len(scalesByBrightness) {
-		brightness = len(scalesByBrightness) - 1
-	}
-	p := Params{
-		BPM:         74 + float64(3*e) + float64(r.n(5)) + float64(30*t),
-		Root:        62 + elevation + []int{-2, 0, 0, 3}[r.n(4)],
-		Scale:       scalesByBrightness[brightness],
-		DroneGain:   0.25 + float64(0.03*e),
-		FifthGain:   0.3 + float64(0.05*e) + float64(0.25*t),
-		PadDensity:  0.7 * (1 - float64(0.6*t)),
-		BellDensity: (0.2 + float64(0.04*e)) * (1 - float64(0.5*t)),
-		AirGain:     0.15 + float64(0.02*e) + float64(0.1*t),
-		PulseGain:   t,
-		FifthOffset: tenseOffset(-8, t), // major third above the low drone: sunshine
-		BellLift:    12,
-		Palette:     overworldPalette,
-		Seed:        seed,
-	}
-	pickLead(&p, overworldLeads)
-	return p
-}
-
 // ---- generative sequencer ----
 
 type rng struct{ s uint64 }

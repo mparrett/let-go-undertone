@@ -23,6 +23,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/mparrett/let-go-undertone/engine"
 )
@@ -33,7 +34,7 @@ func main() {
 	dur := flag.Float64("dur", 48, "WAV duration seconds")
 	seed := flag.Uint64("seed", 1, "level seed")
 	depth := flag.Int("depth", 0, "dungeon depth (negative = overworld elevation)")
-	mood := flag.String("mood", "dungeon", "dungeon | overworld (elevation = depth)")
+	mood := flag.String("mood", "dungeon", strings.Join(engine.MoodNames(), " | ")+" (level = depth)")
 	lead := flag.String("lead", "", "lead instrument: bell|chime|clang|kalimba|reed|pluck (default: seed picks)")
 	tension := flag.Float64("tension", 0, "0..1: tempo up, pulse in, harmony sours")
 	vu := flag.String("vu", "bars", "meter style: bars | compact (one cell per band) | tall (two cells, 2x range)")
@@ -69,11 +70,8 @@ func main() {
 // deriveParams turns the CLI's scene description into engine parameters. The
 // browser build also calls it when the page switches scenes (play_js.go).
 func deriveParams(mood string, seed uint64, level int, tension float64, lead string) engine.Params {
-	var p engine.Params
-	switch mood {
-	case "overworld":
-		p = engine.DeriveOverworld(seed, level, tension)
-	default:
+	p, ok := engine.DeriveMood(mood, seed, level, tension)
+	if !ok {
 		p = engine.DeriveDungeon(seed, level, tension)
 	}
 	if lead != "" {

@@ -69,11 +69,8 @@ func (m *Music) setParameters(v vm.Value) vm.Value {
 	// as a scalar in the map. Deriving a throwaway params for the mood is how
 	// the host gets that palette without exporting the patch tables.
 	if s, ok := kwStr(lgm, "mood"); ok {
-		switch s {
-		case "overworld":
-			m.params.Palette = engine.DeriveOverworld(1, 0, 0).Palette
-		case "dungeon":
-			m.params.Palette = engine.DeriveDungeon(1, 0, 0).Palette
+		if p, ok := engine.DeriveMood(s, 1, 0, 0); ok {
+			m.params.Palette = p.Palette
 		}
 	}
 	flt(lgm, "bpm", &m.params.BPM)
