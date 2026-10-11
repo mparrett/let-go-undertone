@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -140,6 +141,32 @@ func TestVillagePeaks(t *testing.T) {
 		}
 		if db := 20 * math.Log10(peak/32768); db > -2 {
 			t.Errorf("village %+v peaks at %.1f dBFS, want at most -2", c, db)
+		}
+	}
+}
+
+// The drums draw from their own rng streams, so a groove never changes what
+// the melodic tracks play.
+func TestGrooveLeavesMelodyAlone(t *testing.T) {
+	p, _ := DeriveMood("village", 7, 3, 0.6)
+	quiet := p
+	quiet.Groove, quiet.DrumGain, quiet.DrumBusy, quiet.Swing = "", 0, 0, 0
+	for pat := 0; pat < 8; pat++ {
+		if fmt.Sprint(buildPatterns(p, pat)) != fmt.Sprint(buildPatterns(quiet, pat)) {
+			t.Fatalf("pattern %d: the groove changed the melodic tracks", pat)
+		}
+	}
+}
+
+// Under a grid the drums are part of the bed: turn the bed off and they stop.
+func TestGridBedCarriesDrums(t *testing.T) {
+	p, _ := DeriveMood("village", 2, 3, 0)
+	s := NewSynth(p)
+	s.SetGrid(&Grid{Bed: false})
+	s.Read(make([]byte, SampleRate*4*3))
+	for d, v := range s.dvoices {
+		if v.active {
+			t.Errorf("drum lane %d sounds with the bed off", d)
 		}
 	}
 }
