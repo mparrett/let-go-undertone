@@ -77,12 +77,16 @@
    [0 2 4 5 7 9 11]   ; major
    [0 2 4 6 7 9 11]]) ; lydian
 
+(def scales-for-aurora
+  [[0 2 4 6 7 9 11]]) ; lydian, all the way up
+
 (def root-offsets [-2 0 0 3])
 
 ;; mood-weighted lead audition lists; repeats are the weights
 (def dungeon-leads   [:bell :chime :chime :clang :kalimba :pluck :pluck])
 (def overworld-leads [:bell :bell :kalimba :kalimba :reed :pluck :pluck])
 (def meadow-leads    [:bell :kalimba :kalimba :reed :pluck :pluck])
+(def aurora-leads    [:chime :chime :bell :bell :kalimba])
 
 (defn tense-offset
   "Slide the second drone's interval toward dissonance: the mood's calm
@@ -159,7 +163,21 @@
     :air       {:base 0.2 :step 0.02 :hi 0.3}
     :calm      -3 ; major sixth above the low drone
     :bell-lift 12
-    :leads     meadow-leads}})
+    :leads     meadow-leads}
+   ;; Thin, not warm: no drone, slow lydian veils through the delay, a
+   ;; fifth floating over the chord, the odd chime.
+   :aurora
+   {:scales    scales-for-aurora
+    :bpm       {:base 52.0 :step 1.0 :hi 58.0}
+    :root-base 69 :root-step 1
+    :drone     {:base 0.0 :step 0.0}
+    :fifth     {:base 0.3 :step 0.02 :hi 0.4}
+    :pad       {:base 0.75 :step 0.02 :hi 0.85}
+    :bell      {:base 0.08 :step 0.01 :hi 0.14}
+    :air       {:base 0.3 :step 0.03 :hi 0.45}
+    :calm      7 ; a fifth above the chord
+    :bell-lift 0
+    :leads     aurora-leads}})
 
 (defn line-at
   "Evaluate a mood line at level x."

@@ -32,8 +32,9 @@ namespace without lgx.
 Music parameters come from game state:
 
 - **mood**: `dungeon` (minor ladder, saw drone, fifth), `overworld`
-  (mixolydian → major → lydian with elevation, sine bed, lifted bells) or
-  `meadow` (major, high and airy: near-silent drone, dense lifted bells).
+  (mixolydian → major → lydian with elevation, sine bed, lifted bells),
+  `meadow` (major, high and airy: near-silent drone, dense lifted bells) or
+  `aurora` (slow lydian veils through the delay, no drone, the odd chime).
   Moods are rows in a table (`engine/mood.go`, mirrored in
   `letgo/lg/ambience.lg`), so adding one is an entry in each
 - **level**: depth darkens, slows and thickens; elevation brightens

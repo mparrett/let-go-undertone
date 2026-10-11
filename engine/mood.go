@@ -93,12 +93,28 @@ var moods = []mood{
 		palette:  overworldPalette,
 		leads:    meadowLeads,
 	},
+	// Bright by being thin rather than warm: no drone at all, a slow lydian
+	// sky of veil pads smeared through the delay, the second voice a fifth
+	// above the chord, and only the odd chime. Level climbs: the root rises
+	// and the wash thickens.
+	{
+		name:     "aurora",
+		scales:   scalesForAurora,
+		bpm:      lin(52, 1).atMost(58),
+		rootBase: 69, rootStep: 1,
+		drone:   lin(0, 0),
+		fifth:   lin(0.3, 0.02).atMost(0.4),
+		pad:     lin(0.75, 0.02).atMost(0.85),
+		bell:    lin(0.08, 0.01).atMost(0.14),
+		air:     lin(0.3, 0.03).atMost(0.45),
+		calm:    7, // a fifth above the chord, floating over it
+		palette: auroraPalette,
+		leads:   auroraLeads,
+	},
 	// Candidates for later moods, on the dark-to-bright axis:
 	//   - Past dungeon, darker (Void, Below or Hades): lower and slower
 	//     than depth reaches today, perhaps with a new low patch.
-	//   - Past meadow, brighter (Aurora or Stratosphere): bright by being
-	//     thin rather than warm: high, slow, lydian, long reverb, almost no
-	//     rhythm.
+	//   - Stratosphere, a sibling of aurora: thinner still, with no lead.
 	// Two things the table cannot express yet: pentatonic scales (the
 	// sequencer and grid assume seven degrees) and moods that want their own
 	// rhythm, such as a village (the six tracks are fixed).

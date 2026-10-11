@@ -131,3 +131,28 @@ func TestMeadowIsBrightest(t *testing.T) {
 		t.Fatal("meadow tension should reach the same dread interval")
 	}
 }
+
+// Aurora is bright by being thin: nothing under it, fewer bells than the
+// meadow, slower than any mood, and the veil sending into the delay.
+func TestAuroraIsThin(t *testing.T) {
+	for level := 0; level <= 5; level++ {
+		mead, _ := DeriveMood("meadow", 1, level, 0)
+		aur, ok := DeriveMood("aurora", 1, level, 0)
+		if !ok {
+			t.Fatal("aurora is not in the mood table")
+		}
+		if aur.DroneGain != 0 {
+			t.Errorf("level %d: aurora drone %v, want silent", level, aur.DroneGain)
+		}
+		if aur.BellDensity >= mead.BellDensity || aur.BPM >= mead.BPM {
+			t.Errorf("level %d: aurora bells/bpm %v/%v not under meadow %v/%v",
+				level, aur.BellDensity, aur.BPM, mead.BellDensity, mead.BPM)
+		}
+		if aur.Root < mead.Root {
+			t.Errorf("level %d: aurora root %d under meadow %d", level, aur.Root, mead.Root)
+		}
+	}
+	if p, _ := DeriveMood("aurora", 1, 0, 0); p.Palette.Pad[3].op != opSend {
+		t.Fatal("aurora's pad should send into the delay")
+	}
+}

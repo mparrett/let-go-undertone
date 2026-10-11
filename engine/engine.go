@@ -338,6 +338,21 @@ var reed = Patch{
 	{opOut, [4]float64{0.22, 0.5}},
 }
 
+// aurora pad: the pad's sine pair, swelling slowly and fading long, with a
+// send so the delay bus smears it into a sky-wide wash
+var veil = Patch{
+	{opEnv, [4]float64{3, 2, 0.7, 4}},
+	{opOsc, [4]float64{-0.07, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opSend, [4]float64{0.2, 0, 0, 0}},
+	{opOut, [4]float64{0.25, 0.3}},
+	{opEnv, [4]float64{3.4, 2, 0.7, 4}},
+	{opOsc, [4]float64{0.07, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opSend, [4]float64{0.2, 0, 0, 0}},
+	{opOut, [4]float64{0.25, 0.7}},
+}
+
 // overworld drone: sine pair — a bed, not a weight
 var bed = Patch{
 	{opEnv, [4]float64{3, 2, 1, 4}},
@@ -430,6 +445,7 @@ var leadTrim = map[string]float64{
 var dungeonLeads = []string{"bell", "chime", "chime", "clang", "kalimba", "pluck", "pluck"}
 var overworldLeads = []string{"bell", "bell", "kalimba", "kalimba", "reed", "pluck", "pluck"}
 var meadowLeads = []string{"bell", "kalimba", "kalimba", "reed", "pluck", "pluck"}
+var auroraLeads = []string{"chime", "chime", "bell", "bell", "kalimba"}
 
 // pickLead draws from a separate rng stream so the pattern content for a
 // given seed is unchanged — only the instrument varies.
@@ -451,6 +467,7 @@ type Palette struct {
 
 var dungeonPalette = Palette{Drone: drone, Fifth: pad, Pad: pad, Bell: bell, Air: air, Pulse: pulse}
 var overworldPalette = Palette{Drone: bed, Fifth: pad, Pad: pad, Bell: bell, Air: breeze, Pulse: pulse}
+var auroraPalette = Palette{Drone: bed, Fifth: veil, Pad: veil, Bell: bell, Air: breeze, Pulse: pulse}
 
 var scalesByDarkness = [][]int{
 	{0, 2, 3, 5, 7, 9, 10}, // dorian
@@ -462,6 +479,10 @@ var scalesByBrightness = [][]int{
 	{0, 2, 4, 5, 7, 9, 10}, // mixolydian
 	{0, 2, 4, 5, 7, 9, 11}, // major
 	{0, 2, 4, 6, 7, 9, 11}, // lydian
+}
+
+var scalesForAurora = [][]int{
+	{0, 2, 4, 6, 7, 9, 11}, // lydian, all the way up
 }
 
 // The meadow stays major longer and turns lydian only high up: its

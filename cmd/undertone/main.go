@@ -4,7 +4,7 @@
 // the whole track is derived deterministically from a seed.
 //
 // Register: roguelike ambience. Parameters derive from game state —
-// mood (dungeon/overworld/meadow), level (depth darkens, elevation brightens),
+// mood (dungeon/overworld/meadow/aurora), level (depth darkens, elevation brightens),
 // tension (tempo up, pulse in, harmony sours), and the seed, which also
 // picks the lead instrument from a mood-weighted library. SetParameters
 // applies a new map at the next pattern boundary, the same transactional
@@ -17,6 +17,7 @@
 //	go run ./cmd/undertone -play -depth 5 -tension 0.8    # the abyss, something coming
 //	go run ./cmd/undertone -play -mood overworld -depth 3 # bright mirror
 //	go run ./cmd/undertone -play -mood meadow             # brighter still
+//	go run ./cmd/undertone -play -mood aurora             # thin, slow, high
 //	go run ./cmd/undertone -wav out.wav -depth 4 -lead pluck  # deterministic render
 package main
 
