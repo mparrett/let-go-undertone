@@ -391,38 +391,57 @@ var breeze = Patch{
 // Balanced solo (2026-10-11): the clap within 4 dB of the kick while
 // sounding, the shaker about 9 dB under, as hats sit.
 
-// kick: the pulse's swept sine, swept further and faster so it thumps
-// rather than taps
+// kick: the pulse's swept sine, falling fast from about 300 Hz to its note
+// (play it near 62 Hz, which leaves the sub to a game's own impacts), plus a
+// few milliseconds of highpassed noise so it still reads on a phone speaker,
+// which cannot play the thump
 var kick = Patch{
 	{opEnv, [4]float64{0.001, 0.22, 0, 0.08}},
-	{opOsc, [4]float64{0, shpSine, 24, 0.03}},
+	{opOsc, [4]float64{0, shpSine, 28, 0.02}},
 	{opMul, [4]float64{}},
 	{opOut, [4]float64{0.9, 0.5}},
-}
-
-// clap: a highpassed noise burst over a short swept sine body, closer to a
-// frame drum than a backbeat snare, for a village rather than a club
-var clap = Patch{
-	{opEnv, [4]float64{0.001, 0.11, 0, 0.06}},
+	{opEnv, [4]float64{0.0005, 0.005, 0, 0.004}},
 	{opOsc, [4]float64{0, shpNoise, 0, 1}},
 	{opMul, [4]float64{}},
+	{opHpf, [4]float64{2000, 0, 0, 0}},
+	{opOut, [4]float64{0.5, 0.5}},
+}
+
+// clap: three or four quick re-hits (noise under a 50 Hz sine, which peaks
+// every 10 ms) for the first 30 ms, then a longer noise tail for body, over a
+// short swept sine. Closer to a frame drum than a backbeat snare.
+var clap = Patch{
+	{opEnv, [4]float64{0.001, 0.025, 0, 0.01}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opOsc, [4]float64{-21.65, shpSine, 0, 1}}, // 50 Hz from the clap's note
+	{opMul, [4]float64{}},
 	{opHpf, [4]float64{900, 0, 0, 0}},
-	{opLpf, [4]float64{7000, 0, 0, 0}},
+	{opOut, [4]float64{0.9, 0.42}},
+	{opEnv, [4]float64{0.008, 0.16, 0, 0.08}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opHpf, [4]float64{1000, 0, 0, 0}},
+	{opLpf, [4]float64{6000, 0, 0, 0}},
 	{opSend, [4]float64{0.15, 0, 0, 0}},
-	{opOut, [4]float64{0.84, 0.42}},
+	{opOut, [4]float64{0.6, 0.42}},
 	{opEnv, [4]float64{0.001, 0.07, 0, 0.04}},
 	{opOsc, [4]float64{0, shpSine, 7, 0.02}},
 	{opMul, [4]float64{}},
-	{opOut, [4]float64{0.54, 0.45}},
+	{opOut, [4]float64{0.45, 0.45}},
 }
 
-// shaker: noise through two highpasses, short and soft, panned off center
+// shaker: noise band-passed to about 4-9 kHz. Highpassing alone is not
+// enough: white noise puts most of its energy in the top octaves, so without
+// the lowpasses it is a hiss centred near 14 kHz.
 var shaker = Patch{
 	{opEnv, [4]float64{0.004, 0.035, 0, 0.025}},
 	{opOsc, [4]float64{0, shpNoise, 0, 1}},
 	{opMul, [4]float64{}},
-	{opHpf, [4]float64{5500, 0, 0, 0}},
-	{opHpf, [4]float64{5500, 0, 0, 0}},
+	{opHpf, [4]float64{4000, 0, 0, 0}},
+	{opHpf, [4]float64{4000, 0, 0, 0}},
+	{opLpf, [4]float64{7000, 0, 0, 0}},
+	{opLpf, [4]float64{7000, 0, 0, 0}},
 	{opOut, [4]float64{1.2, 0.62}},
 }
 
