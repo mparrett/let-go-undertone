@@ -29,6 +29,7 @@ const (
 	opSend         // p: amount; peek top, add top*amount to delay bus
 	opOut          // p: gain, pan 0..1; pop x -> accumulate to L/R
 	opPluck        // p: transpose semis, feedback; Karplus-Strong string -> push sample
+	opHpf          // p: cutoff Hz; pop x -> push highpassed x
 )
 
 const (
@@ -200,6 +201,15 @@ func (v *Voice) run(l, r, delay *float64) {
 			c := s.k
 			s.lp += c * (stack[sp-1] - s.lp)
 			stack[sp-1] = s.lp
+		case opHpf:
+			// one pole: what the lowpass leaves out. Drums need it, because
+			// noise lowpassed is a hiss and noise highpassed is a shaker.
+			if !s.kset {
+				s.k = 1 - math.Exp(-2*math.Pi*u.p[0]/SampleRate)
+				s.kset = true
+			}
+			s.lp += s.k * (stack[sp-1] - s.lp)
+			stack[sp-1] -= s.lp
 		case opPluck:
 			// Karplus-Strong: a noise burst circulating in a delay line
 			// the length of the period, averaged (lowpassed) each pass.
@@ -373,6 +383,47 @@ var breeze = Patch{
 	{opLpf, [4]float64{1400, 0, 0, 0}},
 	{opLpf, [4]float64{1400, 0, 0, 0}},
 	{opOut, [4]float64{0.9, 0.5}},
+}
+
+// ---- the drum kit (rhythmic moods) ----
+// Each drum is played at a fixed note on its own track, so its trim is
+// baked into its output gain rather than kept in a table like leadTrim.
+// Balanced solo (2026-10-11): the clap within 4 dB of the kick while
+// sounding, the shaker about 9 dB under, as hats sit.
+
+// kick: the pulse's swept sine, swept further and faster so it thumps
+// rather than taps
+var kick = Patch{
+	{opEnv, [4]float64{0.001, 0.22, 0, 0.08}},
+	{opOsc, [4]float64{0, shpSine, 24, 0.03}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.9, 0.5}},
+}
+
+// clap: a highpassed noise burst over a short swept sine body, closer to a
+// frame drum than a backbeat snare, for a village rather than a club
+var clap = Patch{
+	{opEnv, [4]float64{0.001, 0.11, 0, 0.06}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opHpf, [4]float64{900, 0, 0, 0}},
+	{opLpf, [4]float64{7000, 0, 0, 0}},
+	{opSend, [4]float64{0.15, 0, 0, 0}},
+	{opOut, [4]float64{0.84, 0.42}},
+	{opEnv, [4]float64{0.001, 0.07, 0, 0.04}},
+	{opOsc, [4]float64{0, shpSine, 7, 0.02}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.54, 0.45}},
+}
+
+// shaker: noise through two highpasses, short and soft, panned off center
+var shaker = Patch{
+	{opEnv, [4]float64{0.004, 0.035, 0, 0.025}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opHpf, [4]float64{5500, 0, 0, 0}},
+	{opHpf, [4]float64{5500, 0, 0, 0}},
+	{opOut, [4]float64{1.2, 0.62}},
 }
 
 // tension pulse: a soft swept-sine tom, descendant of the techno kick
