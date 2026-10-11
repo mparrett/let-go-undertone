@@ -111,7 +111,7 @@
 (defn clamp01 [t] (max 0.0 (min 1.0 (double t))))
 
 (defn scale-for [tables level]
-  (nth tables (min (quot level 2) (dec (count tables)))))
+  (nth tables (max 0 (min (quot level 2) (dec (count tables))))))
 
 ;; ---- the moods ----
 ;; A mood is a patch bank (chosen Go-side by :mood) plus a point in parameter

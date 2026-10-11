@@ -150,7 +150,7 @@ func (m *mood) derive(seed uint64, level int, tension float64) Params {
 	p := Params{
 		BPM:         m.bpm.at(l) + float64(r.n(5)) + float64(30*t),
 		Root:        m.rootBase + m.rootStep*level + []int{-2, 0, 0, 3}[r.n(4)],
-		Scale:       m.scales[min(level/2, len(m.scales)-1)],
+		Scale:       m.scales[max(0, min(level/2, len(m.scales)-1))],
 		DroneGain:   m.drone.at(l),
 		FifthGain:   m.fifth.at(l) + float64(0.25*t),
 		PadDensity:  m.pad.at(l) * (1 - float64(0.6*t)),

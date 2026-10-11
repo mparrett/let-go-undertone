@@ -45,7 +45,7 @@ func TestLgDerivationMatchesGo(t *testing.T) {
 	c, m := lgRuntime(t)
 
 	for _, seed := range []uint64{1, 7, 42} {
-		for _, depth := range []int{0, 1, 2, 3, 5, 8} {
+		for _, depth := range []int{-5, -2, 0, 1, 2, 3, 5, 8} {
 			for _, tension := range []float64{0, 0.3, 0.6, 1} {
 				for _, mood := range engine.MoodNames() {
 					// Name the mood explicitly rather than going through the

@@ -35,17 +35,19 @@ func main() {
 	wav := flag.String("wav", "", "render to WAV file")
 	dur := flag.Float64("dur", 48, "WAV duration seconds")
 	seed := flag.Uint64("seed", 1, "level seed")
-	depth := flag.Int("depth", 0, "dungeon depth (negative = overworld elevation)")
+	depth := flag.Int("depth", 0, "level within the mood (for dungeon, negative = overworld elevation)")
 	mood := flag.String("mood", "dungeon", strings.Join(engine.MoodNames(), " | ")+" (level = depth)")
 	lead := flag.String("lead", "", "lead instrument: bell|chime|clang|kalimba|reed|pluck (default: seed picks)")
 	tension := flag.Float64("tension", 0, "0..1: tempo up, pulse in, harmony sours")
 	vu := flag.String("vu", "bars", "meter style: bars | compact (one cell per band) | tall (two cells, 2x range)")
 	flag.Parse()
 
-	level := *depth
-	if level < 0 { // signed-depth sugar: -3 means overworld elevation 3
-		*mood, level = "overworld", -level
+	if _, ok := engine.DeriveMood(*mood, 0, 0, 0); !ok {
+		fmt.Fprintf(os.Stderr, "unknown mood %q; want one of: %s\n", *mood, strings.Join(engine.MoodNames(), ", "))
+		os.Exit(2)
 	}
+	m, level := signedDepth(*mood, *depth)
+	*mood = m
 	p := deriveParams(*mood, *seed, level, *tension, *lead)
 	s := engine.NewSynth(p)
 	desc := fmt.Sprintf("mood=%s seed=%d level=%d tension=%.2f lead=%s bpm=%.0f root=%d", *mood, *seed, level, *tension, p.LeadName, p.BPM, p.Root)
@@ -67,6 +69,16 @@ func main() {
 	default:
 		flag.Usage()
 	}
+}
+
+// signedDepth applies the signed-depth sugar, where dungeon depth -3 means
+// overworld elevation 3. It applies only to the dungeon, so an explicitly
+// chosen mood is never replaced.
+func signedDepth(mood string, depth int) (string, int) {
+	if depth < 0 && (mood == "dungeon" || mood == "") {
+		return "overworld", -depth
+	}
+	return mood, depth
 }
 
 // deriveParams turns the CLI's scene description into engine parameters. The
