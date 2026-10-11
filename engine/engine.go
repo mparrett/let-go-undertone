@@ -698,6 +698,7 @@ type Synth struct {
 	dvoices [nDrums]Voice
 	offLeft [nDrums]int // frames until each lane's off 16th; 0 = none armed
 	offGain [nDrums]float64
+	offSeed [nDrums]uint64
 
 	// VU meter tap: read-only from the synthesis path's view — nothing
 	// here feeds back into the samples, so renders stay byte-identical.

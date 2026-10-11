@@ -94,7 +94,7 @@ func (s *Synth) stepDrums() {
 		v := &s.dvoices[d]
 		h := s.drums[d][s.row]
 		if h.on > 0 {
-			v.trigger(drumKit[d].patch, drumKit[d].note, 1, h.on, s.params.Seed+uint64(s.pat*rows+s.row)*nDrums+uint64(d))
+			v.strike(d, h.on, s.drumSeed(d))
 		} else if v.active && v.gate {
 			v.gate = false
 		}
@@ -104,8 +104,24 @@ func (s *Synth) stepDrums() {
 			// 1/6 a triplet shuffle
 			s.offLeft[d] = max(1, int(float64(s.samplesPerRow)*(0.5+s.params.Swing)))
 			s.offGain[d] = h.off
+			// seeded now: by the time it fires, step has moved on to the next row
+			s.offSeed[d] = s.drumSeed(d) + 1<<32
 		}
 	}
+}
+
+// drumSeed seeds lane d's hit on the current row.
+func (s *Synth) drumSeed(d int) uint64 {
+	return s.params.Seed + uint64(s.pat*rows+s.row)*nDrums + uint64(d)
+}
+
+// strike hits drum lane d afresh. trigger's legato path suits drones but not
+// drums: a lane that hits every 16th is still active at its next hit, and
+// carrying its envelope and phase over would soften every transient and
+// start the clap's re-hits mid-burst.
+func (v *Voice) strike(d int, gain float64, seed uint64) {
+	v.active = false
+	v.trigger(drumKit[d].patch, drumKit[d].note, 1, gain, seed)
 }
 
 // runDrums fires any off 16th that is due and renders the drum voices.
@@ -115,7 +131,7 @@ func (s *Synth) runDrums(l, r *float64) {
 		if s.offLeft[d] > 0 {
 			s.offLeft[d]--
 			if s.offLeft[d] == 0 {
-				v.trigger(drumKit[d].patch, drumKit[d].note, 1, s.offGain[d], s.params.Seed+uint64(s.pat*rows+s.row)*nDrums+uint64(d)+1<<32)
+				v.strike(d, s.offGain[d], s.offSeed[d])
 			}
 		}
 		if v.active {

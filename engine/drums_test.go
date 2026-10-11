@@ -170,3 +170,26 @@ func TestGridBedCarriesDrums(t *testing.T) {
 		}
 	}
 }
+
+// A drum hit while the lane still sounds starts a fresh transient: no
+// envelope level or oscillator phase carried over from the last hit.
+func TestDrumStrikeIsFresh(t *testing.T) {
+	for d := range nDrums {
+		var v Voice
+		v.strike(d, 1, 1)
+		var l, r float64
+		var bus float64
+		for range SampleRate / 50 {
+			v.run(&l, &r, &bus)
+		}
+		if !v.active {
+			t.Fatalf("lane %d went quiet within 20 ms; the test needs it sounding", d)
+		}
+		v.strike(d, 1, 2)
+		for i, u := range v.units {
+			if u.env != 0 || u.phase != 0 {
+				t.Errorf("lane %d unit %d: re-hit kept env %.3g phase %.3g", d, i, u.env, u.phase)
+			}
+		}
+	}
+}
