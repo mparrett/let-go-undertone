@@ -429,6 +429,7 @@ var leadTrim = map[string]float64{
 // timbre: two seeds differ in instrument, not just notes)
 var dungeonLeads = []string{"bell", "chime", "chime", "clang", "kalimba", "pluck", "pluck"}
 var overworldLeads = []string{"bell", "bell", "kalimba", "kalimba", "reed", "pluck", "pluck"}
+var meadowLeads = []string{"bell", "kalimba", "kalimba", "reed", "pluck", "pluck"}
 
 // pickLead draws from a separate rng stream so the pattern content for a
 // given seed is unchanged — only the instrument varies.
@@ -459,6 +460,14 @@ var scalesByDarkness = [][]int{
 
 var scalesByBrightness = [][]int{
 	{0, 2, 4, 5, 7, 9, 10}, // mixolydian
+	{0, 2, 4, 5, 7, 9, 11}, // major
+	{0, 2, 4, 6, 7, 9, 11}, // lydian
+}
+
+// The meadow stays major longer and turns lydian only high up: its
+// brightness is register and air, not the mode.
+var scalesForMeadow = [][]int{
+	{0, 2, 4, 5, 7, 9, 11}, // major
 	{0, 2, 4, 5, 7, 9, 11}, // major
 	{0, 2, 4, 6, 7, 9, 11}, // lydian
 }

@@ -107,3 +107,27 @@ func TestEveryLeadHasATrim(t *testing.T) {
 		}
 	}
 }
+
+// Meadow is the bright end: at every level it sits at or above the
+// overworld's register, with less drone under it and more bells over it.
+func TestMeadowIsBrightest(t *testing.T) {
+	for level := 0; level <= 5; level++ {
+		over := DeriveOverworld(1, level, 0)
+		mead, ok := DeriveMood("meadow", 1, level, 0)
+		if !ok {
+			t.Fatal("meadow is not in the mood table")
+		}
+		if mead.Root < over.Root {
+			t.Errorf("level %d: meadow root %d under overworld %d", level, mead.Root, over.Root)
+		}
+		if mead.DroneGain >= over.DroneGain {
+			t.Errorf("level %d: meadow drone %v not under overworld %v", level, mead.DroneGain, over.DroneGain)
+		}
+		if mead.BellDensity <= over.BellDensity {
+			t.Errorf("level %d: meadow bells %v not denser than overworld %v", level, mead.BellDensity, over.BellDensity)
+		}
+	}
+	if p, _ := DeriveMood("meadow", 1, 2, 1); p.FifthOffset != -11 {
+		t.Fatal("meadow tension should reach the same dread interval")
+	}
+}

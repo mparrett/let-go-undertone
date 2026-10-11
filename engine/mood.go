@@ -73,6 +73,26 @@ var moods = []mood{
 		palette:  overworldPalette,
 		leads:    overworldLeads,
 	},
+	// Warm, grounded and sunny: overworld without the floor. The drone is
+	// near silent, so nothing sits under the bed; the root starts high, bells
+	// come dense and an octave up like birdsong, and the second drone sings a
+	// major sixth over the first. Level is the climb through the meadow: a
+	// little faster and busier, turning lydian at the top.
+	{
+		name:     "meadow",
+		scales:   scalesForMeadow,
+		bpm:      lin(88, 2).atMost(100),
+		rootBase: 67, rootStep: 0,
+		drone:    lin(0.12, 0),
+		fifth:    lin(0.25, 0.03).atMost(0.4),
+		pad:      lin(0.5, 0),
+		bell:     lin(0.3, 0.03).atMost(0.45),
+		air:      lin(0.2, 0.02).atMost(0.3),
+		calm:     -3, // major sixth above the low drone
+		bellLift: 12,
+		palette:  overworldPalette,
+		leads:    meadowLeads,
+	},
 }
 
 // MoodNames lists the moods DeriveMood knows, darkest first.

@@ -72,11 +72,17 @@
    [0 2 4 5 7 9 11]   ; major
    [0 2 4 6 7 9 11]]) ; lydian
 
+(def scales-for-meadow
+  [[0 2 4 5 7 9 11]   ; major
+   [0 2 4 5 7 9 11]   ; major
+   [0 2 4 6 7 9 11]]) ; lydian
+
 (def root-offsets [-2 0 0 3])
 
 ;; mood-weighted lead audition lists; repeats are the weights
 (def dungeon-leads   [:bell :chime :chime :clang :kalimba :pluck :pluck])
 (def overworld-leads [:bell :bell :kalimba :kalimba :reed :pluck :pluck])
+(def meadow-leads    [:bell :kalimba :kalimba :reed :pluck :pluck])
 
 (defn tense-offset
   "Slide the second drone's interval toward dissonance: the mood's calm
@@ -139,7 +145,21 @@
     :air       {:base 0.15 :step 0.02}
     :calm      -8 ; major third above: sunshine
     :bell-lift 12
-    :leads     overworld-leads}})
+    :leads     overworld-leads}
+   ;; Overworld without the floor: near-silent drone, high root, dense
+   ;; lifted bells, the second drone a major sixth up.
+   :meadow
+   {:scales    scales-for-meadow
+    :bpm       {:base 88.0 :step 2.0 :hi 100.0}
+    :root-base 67 :root-step 0
+    :drone     {:base 0.12 :step 0.0}
+    :fifth     {:base 0.25 :step 0.03 :hi 0.4}
+    :pad       {:base 0.5 :step 0.0}
+    :bell      {:base 0.3 :step 0.03 :hi 0.45}
+    :air       {:base 0.2 :step 0.02 :hi 0.3}
+    :calm      -3 ; major sixth above the low drone
+    :bell-lift 12
+    :leads     meadow-leads}})
 
 (defn line-at
   "Evaluate a mood line at level x."

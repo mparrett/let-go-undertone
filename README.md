@@ -31,8 +31,11 @@ namespace without lgx.
 
 Music parameters come from game state:
 
-- **mood**: `dungeon` (minor ladder, saw drone, fifth) or `overworld`
-  (mixolydian → major → lydian with elevation, sine bed, lifted bells)
+- **mood**: `dungeon` (minor ladder, saw drone, fifth), `overworld`
+  (mixolydian → major → lydian with elevation, sine bed, lifted bells) or
+  `meadow` (major, high and airy: near-silent drone, dense lifted bells).
+  Moods are rows in a table (`engine/mood.go`, mirrored in
+  `letgo/lg/ambience.lg`), so adding one is an entry in each
 - **level**: depth darkens, slows and thickens; elevation brightens
 - **tension** (0..1): raises tempo, fades in a low pulse, slides the second
   drone from fifth to tritone to minor ninth, and thins the calm layers
@@ -132,7 +135,7 @@ go run ./cmd/lghost -e '(do (ambience/score! 7 4 0.6) (audio/music-start) (sleep
 go run ./cmd/lghost -e '(do (ambience/score! 7 4 0.6) (audio/render-wav "out.wav" 20.0))'
 ```
 
-`letgo/parity_test.go` renders 144 mood × seed × depth × tension cases
+`letgo/parity_test.go` renders every mood across a grid of seeds, depths and tensions
 through both derivations, Go and lg, and compares the parameters field by
 field plus a hash of the PCM. Two things it caught are worth knowing if you
 port similar code to lg. First, lg's `*` raises on overflow, so seed mixing
