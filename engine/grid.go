@@ -91,6 +91,15 @@ func (s *Synth) applyGrid(g *Grid, row int) {
 			s.voices[t].gate = false
 		}
 	}
+	// the generator's drums are part of the bed
+	for d := range s.drums {
+		if g.Bed {
+			s.drums[d][row].on *= gridBedScale
+			s.drums[d][row].off *= gridBedScale
+		} else {
+			s.drums[d][row] = drumHit{}
+		}
+	}
 	s.pats[trackLead][row] = trackRow{}
 	if d := g.Lead[row]; d > 0 {
 		gain, ok := gridLeadGain[p.LeadName]

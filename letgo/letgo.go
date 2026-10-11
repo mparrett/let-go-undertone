@@ -89,6 +89,15 @@ func (m *Music) setParameters(v vm.Value) vm.Value {
 	if sc, ok := ints(lgm, "scale"); ok {
 		m.params.Scale = sc
 	}
+	if s, ok := kwStr(lgm, "groove"); ok {
+		if s == "none" {
+			s = ""
+		}
+		m.params.Groove = s
+	}
+	flt(lgm, "drum-gain", &m.params.DrumGain)
+	flt(lgm, "drum-busy", &m.params.DrumBusy)
+	flt(lgm, "swing", &m.params.Swing)
 	if s, ok := kwStr(lgm, "lead"); ok {
 		engine.ApplyLead(&m.params, s)
 	}

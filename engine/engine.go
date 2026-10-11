@@ -484,6 +484,12 @@ type Params struct {
 	LeadGate    int     // gate rows for the lead (sustained leads want > 1)
 	Palette     Palette // the mood's patch bank
 	Seed        uint64
+
+	// Drums (drums.go); a mood without a groove leaves them off.
+	Groove   string  // a grooveLib name; "" plays no drums
+	DrumGain float64 // scales every drum hit
+	DrumBusy float64 // 0..1: chance each ? step in the groove plays
+	Swing    float64 // 0..0.25: how far past halfway the off 16th lands
 }
 
 // leadDef is one entry in the lead-instrument library.
@@ -516,6 +522,7 @@ var dungeonLeads = []string{"bell", "chime", "chime", "clang", "kalimba", "pluck
 var overworldLeads = []string{"bell", "bell", "kalimba", "kalimba", "reed", "pluck", "pluck"}
 var meadowLeads = []string{"bell", "kalimba", "kalimba", "reed", "pluck", "pluck"}
 var auroraLeads = []string{"chime", "chime", "bell", "bell", "kalimba"}
+var villageLeads = []string{"kalimba", "kalimba", "pluck", "pluck", "reed"}
 
 // pickLead draws from a separate rng stream so the pattern content for a
 // given seed is unchanged — only the instrument varies.
@@ -549,6 +556,11 @@ var scalesByBrightness = [][]int{
 	{0, 2, 4, 5, 7, 9, 10}, // mixolydian
 	{0, 2, 4, 5, 7, 9, 11}, // major
 	{0, 2, 4, 6, 7, 9, 11}, // lydian
+}
+
+var scalesForVillage = [][]int{
+	{0, 2, 4, 5, 7, 9, 10}, // mixolydian
+	{0, 2, 4, 5, 7, 9, 11}, // major
 }
 
 var scalesForAurora = [][]int{
@@ -676,6 +688,12 @@ type Synth struct {
 	dbus          float64
 	fx            sfx // one-shot lane (sfx.go); the sequencer never sees it
 
+	// drum lanes (drums.go), silent in moods without a groove
+	drums   [nDrums][rows]drumHit
+	dvoices [nDrums]Voice
+	offLeft [nDrums]int // frames until each lane's off 16th; 0 = none armed
+	offGain [nDrums]float64
+
 	// VU meter tap: read-only from the synthesis path's view — nothing
 	// here feeds back into the samples, so renders stay byte-identical.
 	mlp  [3]float64 // one-pole states at the band edges
@@ -768,11 +786,13 @@ func (s *Synth) step() {
 			s.apply(*p)
 		}
 		s.pats = buildPatterns(s.params, s.pat)
+		s.drums = buildDrums(s.params, s.pat)
 	}
 	if g := s.grid.Load(); g != nil {
 		s.applyGrid(g, s.row)
 	}
 	s.rowLog.add(s.nframe, s.row)
+	s.stepDrums()
 	for t := 0; t < nTracks; t++ {
 		v := &s.voices[t]
 		if tr := s.pats[t][s.row]; tr.note != 0 {
@@ -805,6 +825,7 @@ func (s *Synth) frame() (int16, int16) {
 			s.voices[i].run(&l, &r, &s.dbus)
 		}
 	}
+	s.runDrums(&l, &r)
 	s.runShots(&l, &r)
 	// cross-fed stereo delay
 	wl, wr := s.dl[s.dpos], s.dr[s.dpos]
@@ -895,6 +916,18 @@ func (p Params) sanitized() Params {
 	if p.LeadGate < 1 {
 		p.LeadGate = 1
 	}
+	if !(p.DrumGain >= 0) {
+		p.DrumGain = 0
+	}
+	p.DrumGain = min(p.DrumGain, 4)
+	if !(p.DrumBusy >= 0) {
+		p.DrumBusy = 0
+	}
+	p.DrumBusy = min(p.DrumBusy, 1)
+	if !(p.Swing >= 0) {
+		p.Swing = 0
+	}
+	p.Swing = min(p.Swing, 0.25)
 	return p
 }
 
