@@ -172,7 +172,9 @@ func TestGridOwnsDrums(t *testing.T) {
 		s := NewSynth(p)
 		s.SetGrid(&g)
 		var any bool
-		buf := make([]byte, 4*s.samplesPerRow/4)
+		// a quarter row of frames per read (4 bytes a frame), so a short hit
+		// can't start and finish between checks; 4*rows reads is one pattern
+		buf := make([]byte, 4*(s.samplesPerRow/4))
 		for range 4 * rows {
 			s.Read(buf)
 			for _, v := range s.dvoices {
@@ -207,6 +209,22 @@ func TestSeedGridWritesTheGroove(t *testing.T) {
 	h := SeedGrid(bare)
 	if g.Lead != h.Lead || g.Bass != h.Bass || g.Pulse != h.Pulse {
 		t.Error("seeding the drums changed the lead, bass or pulse")
+	}
+	// fills come through too: at full tension most of them play
+	fills := 0
+	for seed := uint64(1); seed <= 20; seed++ {
+		q, _ := DeriveMood("village", seed, 3, 1)
+		sg, groove := SeedGrid(q), grooveLib[q.Groove]
+		for d := range groove {
+			for i := range groove[d] {
+				if groove[d][i] == 'f' && sg.Drums[d][i] != '.' {
+					fills++
+				}
+			}
+		}
+	}
+	if fills == 0 {
+		t.Error("no seeded village grid at full tension has a fill")
 	}
 	if h.Drums != [DrumLanes]string{} {
 		t.Errorf("a mood without a groove seeded drums %q", h.Drums)

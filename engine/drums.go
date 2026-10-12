@@ -62,20 +62,9 @@ func buildDrums(p Params, pat int) [nDrums][rows]drumHit {
 		return out
 	}
 	r := rng{(p.Seed ^ uint64(pat)*0x9e3779b97f4a7c15) + grooveSalt | 1}
-	fill := 0.15 + 0.6*p.PulseGain
 	for d := range g {
 		for i := 0; i < 2*rows; i++ {
-			v := drumLevel(g[d][i])
-			switch g[d][i] {
-			case '?':
-				if r.f() < p.DrumBusy {
-					v = 0.45
-				}
-			case 'f':
-				if r.f() < fill {
-					v = 0.6
-				}
-			}
+			v := stepLevel(g[d][i], p, &r)
 			if i%2 == 0 {
 				out[d][i/2].on = v * p.DrumGain
 			} else {
@@ -84,6 +73,23 @@ func buildDrums(p Params, pat int) [nDrums][rows]drumHit {
 		}
 	}
 	return out
+}
+
+// stepLevel is the velocity a groove step plays at, drawing from r for the
+// chance steps. It is the one reader of groove notation: the generator and
+// SeedGrid both go through it, so they agree on every symbol.
+func stepLevel(c byte, p Params, r *rng) float64 {
+	switch c {
+	case '?':
+		if r.f() < p.DrumBusy {
+			return 0.45
+		}
+	case 'f':
+		if r.f() < 0.15+0.6*p.PulseGain {
+			return 0.6
+		}
+	}
+	return drumLevel(c)
 }
 
 // drumLevel is the velocity of a fixed groove step: X, x or o; 0 otherwise.

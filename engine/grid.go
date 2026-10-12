@@ -146,16 +146,21 @@ func SeedGrid(p Params) Grid {
 	if r.f() < 0.5 {
 		g.Pulse[12] = true
 	}
-	// The mood's groove, written out: its chance steps drawn once, after
-	// everything above, so drums never shift a seed's lead or bass.
+	// The mood's groove, written out: its chance steps (busy steps and fills)
+	// drawn once, after everything above, so drums never shift a seed's lead
+	// or bass. Each level is written as the nearest symbol the grid has.
 	if groove, ok := grooveLib[p.Groove]; ok {
 		for d, lane := range groove {
 			b := []byte(lane)
-			for i, c := range b {
-				switch {
-				case c == '?' && r.f() < p.DrumBusy:
+			for i := range b {
+				switch v := stepLevel(b[i], p, &r); {
+				case v >= 0.85:
+					b[i] = 'X'
+				case v >= 0.55:
+					b[i] = 'x'
+				case v > 0:
 					b[i] = 'o'
-				case c != 'X' && c != 'x' && c != 'o':
+				default:
 					b[i] = '.'
 				}
 			}
