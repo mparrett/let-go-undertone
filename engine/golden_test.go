@@ -55,7 +55,11 @@ func TestDerivationGolden(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.Split(b.String(), "\n")
-	for i, w := range strings.Split(string(want), "\n") {
+	wantLines := strings.Split(string(want), "\n")
+	if len(got) != len(wantLines) {
+		t.Fatalf("derived %d lines, golden has %d; run with -update if the change is intended", len(got), len(wantLines))
+	}
+	for i, w := range wantLines {
 		if i >= len(got) || got[i] != w {
 			t.Fatalf("line %d differs:\n got %s\nwant %s", i+1, got[min(i, len(got)-1)], w)
 		}

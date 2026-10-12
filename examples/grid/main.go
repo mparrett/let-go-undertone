@@ -76,19 +76,17 @@ func (j gridJSON) grid() engine.Grid {
 var extraAPI func(api map[string]any)
 
 func derive(c paramsJSON) engine.Params {
-	var p engine.Params
-	switch c.Mood {
-	case "dungeon":
-		p = engine.DeriveDungeon(c.Seed, 2, 0)
+	mood, level := c.Mood, 0
+	switch mood {
+	case "dungeon", "overworld":
+		level = 2
 	case "ruins":
 		// The dungeon's shallowest level, where it is still dorian: minor,
 		// but with a raised sixth that keeps it from turning grim.
-		p = engine.DeriveDungeon(c.Seed, 0, 0)
-	case "aurora":
-		p, _ = engine.DeriveMood("aurora", c.Seed, 0, 0)
-	case "meadow":
-		p, _ = engine.DeriveMood("meadow", c.Seed, 0, 0)
-	default:
+		mood = "dungeon"
+	}
+	p, ok := engine.DeriveMood(mood, c.Seed, level, 0)
+	if !ok {
 		p = engine.DeriveOverworld(c.Seed, 2, 0)
 	}
 	if c.Voice != "" {

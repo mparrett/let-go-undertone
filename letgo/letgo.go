@@ -70,7 +70,10 @@ func (m *Music) setParameters(v vm.Value) vm.Value {
 	// the host gets that palette without exporting the patch tables.
 	if s, ok := kwStr(lgm, "mood"); ok {
 		if p, ok := engine.DeriveMood(s, 1, 0, 0); ok {
+			// The palette's bell is the mood's seed-1 lead, so its name and
+			// gate come too; a :lead below still overrides all three.
 			m.params.Palette = p.Palette
+			m.params.LeadName, m.params.LeadGate = p.LeadName, p.LeadGate
 		}
 	}
 	flt(lgm, "bpm", &m.params.BPM)
