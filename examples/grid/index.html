@@ -132,6 +132,9 @@
   let st = { bpm: 110, mood: "overworld", voice: "kalimba", seed: 1, bed: true,
              lead: Array(STEPS).fill(0), bass: Array(STEPS).fill(0), pulse: Array(STEPS).fill(false), drums: lanes() };
   let playing = false, ready = false, linkHasDrums = false;
+  // Set once the drum lanes hold a choice, even an empty one: an edit, clear,
+  // or a link that carries them. Until then a mood change brings its groove.
+  let drumsChosen = false;
 
   // ---- share links: #v1;t=110;m=o;v=kalimba;s=1;bed=1;L=...;B=...;P=hex;D=kick,clap,shaker ----
   // D came later; a link without it takes its drums from the mood's groove.
@@ -150,6 +153,7 @@
     const p = parseInt(kv.P || "0", 16);
     const D = (kv.D || "").split(",");
     linkHasDrums = D.length === DRUMS.length && D.every((s) => /^[Xxo.]*$/.test(s));
+    drumsChosen = linkHasDrums;
     st = { ...st, lead: L, bass: B, pulse: [...Array(STEPS)].map((_, i) => !!(p & (1 << i))),
            drums: lanes(linkHasDrums ? D : null),
            bpm: Math.min(160, Math.max(60, +kv.t || 110)), mood: MOODS.find((m) => m[0] === kv.m) || "overworld",
@@ -224,7 +228,7 @@
     const s = +c.dataset.step, lane = c.dataset.lane, d = +c.dataset.deg;
     if (lane === "drums") { // mode is the character a drag paints
       const row = st.drums[c.dataset.drum], v = mode ?? TAP[row[c.dataset.i]];
-      row[c.dataset.i] = v; return v;
+      row[c.dataset.i] = v; drumsChosen = true; return v;
     }
     if (lane === "pulse") {
       const v = mode ?? !st.pulse[s]; st.pulse[s] = v; return v;
@@ -254,7 +258,7 @@
       const b = document.createElement("span"); b.className = "chip"; b.textContent = v; b.dataset.v = v;
       b.onclick = () => {
         st[key] = v; pushParams();
-        if (key === "mood" && ready && drumStrings().every((s) => /^\.*$/.test(s))) {
+        if (key === "mood" && ready && !drumsChosen) {
           st.drums = lanes(JSON.parse(undertoneGrid.seedGrid(st.seed)).drums); pushGrid();
         }
         paint();
@@ -277,22 +281,23 @@
   }
   $("bpm").oninput = (e) => { st.bpm = +e.target.value; $("bpmv").textContent = st.bpm; pushParams(); };
   $("bed").onclick = () => { st.bed = !st.bed; paint(); pushGrid(); };
-  $("clear").onclick = () => { st.lead.fill(0); st.bass.fill(0); st.pulse.fill(false); st.drums = lanes(); paint(); pushGrid(); };
+  $("clear").onclick = () => { st.lead.fill(0); st.bass.fill(0); st.pulse.fill(false); st.drums = lanes(); drumsChosen = true; paint(); pushGrid(); };
   $("dice").onclick = () => {
     if (!ready) return;
     st.seed = (st.seed % 999) + 1;
     pushParams(); // the seed also picks the bed's patterns
     const g = JSON.parse(undertoneGrid.seedGrid(st.seed));
     st.lead = g.lead; st.bass = g.bass; st.pulse = g.pulse; st.drums = lanes(g.drums);
+    drumsChosen = false; // a fresh start: the next mood brings its groove
     paint(); pushGrid();
     status.textContent = `seed ${st.seed}`;
   };
   let mutations = 0;
   $("mutate").onclick = () => {
-    const out = undertoneGrid.mutate(JSON.stringify({ lead: st.lead, bass: st.bass, pulse: st.pulse, bed: st.bed }), ++mutations);
+    const out = undertoneGrid.mutate(JSON.stringify({ lead: st.lead, bass: st.bass, pulse: st.pulse, drums: drumStrings(), bed: st.bed }), ++mutations);
     if (!out) { status.textContent = "lg is still starting; try again in a moment"; return; }
     const g = JSON.parse(out);
-    st.lead = g.lead; st.bass = g.bass; st.pulse = g.pulse;
+    st.lead = g.lead; st.bass = g.bass; st.pulse = g.pulse; st.drums = lanes(g.drums);
     paint(); pushGrid();
     status.textContent = `mutation ${mutations}, by lg`;
   };
