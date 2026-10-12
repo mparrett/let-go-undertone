@@ -52,6 +52,9 @@ func main() {
 	p := deriveParams(*mood, *seed, level, *tension, *lead)
 	s := engine.NewSynth(p)
 	desc := fmt.Sprintf("mood=%s seed=%d level=%d tension=%.2f lead=%s bpm=%.0f root=%d", *mood, *seed, level, *tension, p.LeadName, p.BPM, p.Root)
+	if p.Groove != "" {
+		desc += " groove=" + p.Groove
+	}
 	switch {
 	case *wav != "":
 		if err := engine.WriteWAV(*wav, s, *dur); err != nil {

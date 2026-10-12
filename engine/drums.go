@@ -8,6 +8,10 @@ package engine
 
 const nDrums = 3 // kick, clap, shaker
 
+// grooveSalt offsets both drum rng streams from the melodic ones. The lg port
+// mirrors it as groove-salt in ambience.lg, so change both together.
+const grooveSalt = 0x9700e5
+
 // drumKit is each lane's patch and the note it plays at. The notes matter
 // only for the pitched parts: the kick's fundamental and the clap's body.
 var drumKit = [nDrums]struct {
@@ -57,7 +61,7 @@ func buildDrums(p Params, pat int) [nDrums][rows]drumHit {
 	if !ok || p.DrumGain <= 0 {
 		return out
 	}
-	r := rng{(p.Seed ^ uint64(pat)*0x9e3779b97f4a7c15) + 0x9700e5 | 1}
+	r := rng{(p.Seed ^ uint64(pat)*0x9e3779b97f4a7c15) + grooveSalt | 1}
 	fill := 0.15 + 0.6*p.PulseGain
 	for d := range g {
 		for i := 0; i < 2*rows; i++ {
@@ -143,6 +147,6 @@ func (s *Synth) runDrums(l, r *float64) {
 // pickGroove draws the groove from its own stream, as pickLead draws the
 // lead, so a mood's grooves never change its notes.
 func pickGroove(p *Params, names []string) {
-	r := rng{p.Seed*0x9e3779b97f4a7c15 + 0x9700e5 | 1}
+	r := rng{p.Seed*0x9e3779b97f4a7c15 + grooveSalt | 1}
 	p.Groove = names[r.n(len(names))]
 }
