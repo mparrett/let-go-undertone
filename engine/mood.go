@@ -38,6 +38,12 @@ type mood struct {
 	bellLift int
 	palette  Palette
 	leads    []string // the seed picks one; repeats are the weights
+
+	// Drums, for rhythmic moods; the zero values leave them off.
+	grooves []string // grooveLib names; the seed picks one
+	drums   line     // drum gain
+	busy    line     // chance each ? step plays
+	swing   float64
 }
 
 var moods = []mood{
@@ -111,13 +117,34 @@ var moods = []mood{
 		palette: auroraPalette,
 		leads:   auroraLeads,
 	},
+	// The first mood with drums: a warm daytime village, mixolydian turning
+	// major, a light shuffle under kalimba and pluck. Level is the day
+	// building to a festival: the shaker fills in, the drums come up.
+	{
+		name:     "village",
+		scales:   scalesForVillage,
+		bpm:      lin(100, 2).atMost(112),
+		rootBase: 62, rootStep: 0,
+		drone:    lin(0.15, 0),
+		fifth:    lin(0.25, 0),
+		pad:      lin(0.55, 0),
+		bell:     lin(0.22, 0.02).atMost(0.32),
+		air:      lin(0.1, 0),
+		calm:     -8, // major third above the low drone
+		bellLift: 12,
+		palette:  overworldPalette,
+		leads:    villageLeads,
+		grooves:  []string{"amble", "amble", "skip", "stomp"},
+		drums:    lin(0.55, 0.05).atMost(0.8),
+		busy:     lin(0.2, 0.12).atMost(0.8),
+		swing:    0.1,
+	},
 	// Candidates for later moods, on the dark-to-bright axis:
 	//   - Past dungeon, darker (Void, Below or Hades): lower and slower
 	//     than depth reaches today, perhaps with a new low patch.
 	//   - Stratosphere, a sibling of aurora: thinner still, with no lead.
-	// Two things the table cannot express yet: pentatonic scales (the
-	// sequencer and grid assume seven degrees) and moods that want their own
-	// rhythm, such as a village (the six tracks are fixed).
+	// The table cannot express pentatonic scales yet: the sequencer and grid
+	// assume seven degrees.
 }
 
 // MoodNames lists the moods DeriveMood knows, darkest first.
@@ -161,8 +188,14 @@ func (m *mood) derive(seed uint64, level int, tension float64) Params {
 		BellLift:    m.bellLift,
 		Palette:     m.palette,
 		Seed:        seed,
+		DrumGain:    m.drums.at(l),
+		DrumBusy:    m.busy.at(l),
+		Swing:       m.swing,
 	}
 	pickLead(&p, m.leads)
+	if len(m.grooves) > 0 {
+		pickGroove(&p, m.grooves)
+	}
 	return p
 }
 

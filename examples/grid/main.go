@@ -14,7 +14,7 @@
 // JS surface, on window.undertoneGrid:
 //
 //	setGrid(json)    {lead:[16], bass:[16], pulse:[16], bed}: degrees 1..8, 0 = rest
-//	setParams(json)  {bpm, mood: "aurora"|"meadow"|"overworld"|"ruins"|"dungeon", voice, seed}
+//	setParams(json)  {bpm, mood: "village"|"aurora"|"meadow"|"overworld"|"ruins"|"dungeon", voice, seed}
 //	seedGrid(seed)   a starting grid derived from the current params, as JSON
 //	play() / stop()  call from the tap handler: iOS resumes audio only inside one
 //	row()            the step being heard, or -1 while stopped

@@ -76,6 +76,9 @@ func TestLgDerivationMatchesGo(t *testing.T) {
 					if got.FifthOffset != want.FifthOffset || got.BellLift != want.BellLift {
 						t.Errorf("%s: offset/lift = %d/%d, want %d/%d", name, got.FifthOffset, got.BellLift, want.FifthOffset, want.BellLift)
 					}
+					if got.Groove != want.Groove {
+						t.Errorf("%s: groove = %q, want %q", name, got.Groove, want.Groove)
+					}
 					if got.Seed != want.Seed {
 						t.Errorf("%s: seed = %d, want %d", name, got.Seed, want.Seed)
 					}
@@ -91,6 +94,9 @@ func TestLgDerivationMatchesGo(t *testing.T) {
 						{"bell-density", got.BellDensity, want.BellDensity},
 						{"air-gain", got.AirGain, want.AirGain},
 						{"pulse-gain", got.PulseGain, want.PulseGain},
+						{"drum-gain", got.DrumGain, want.DrumGain},
+						{"drum-busy", got.DrumBusy, want.DrumBusy},
+						{"swing", got.Swing, want.Swing},
 					} {
 						if f.got != f.want {
 							t.Errorf("%s: %s = %v, want %v", name, f.what, f.got, f.want)

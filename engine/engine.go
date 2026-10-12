@@ -29,6 +29,7 @@ const (
 	opSend         // p: amount; peek top, add top*amount to delay bus
 	opOut          // p: gain, pan 0..1; pop x -> accumulate to L/R
 	opPluck        // p: transpose semis, feedback; Karplus-Strong string -> push sample
+	opHpf          // p: cutoff Hz; pop x -> push highpassed x
 )
 
 const (
@@ -200,6 +201,15 @@ func (v *Voice) run(l, r, delay *float64) {
 			c := s.k
 			s.lp += c * (stack[sp-1] - s.lp)
 			stack[sp-1] = s.lp
+		case opHpf:
+			// one pole: what the lowpass leaves out. Drums need it, because
+			// noise lowpassed is a hiss and noise highpassed is a shaker.
+			if !s.kset {
+				s.k = 1 - math.Exp(-2*math.Pi*u.p[0]/SampleRate)
+				s.kset = true
+			}
+			s.lp += s.k * (stack[sp-1] - s.lp)
+			stack[sp-1] -= s.lp
 		case opPluck:
 			// Karplus-Strong: a noise burst circulating in a delay line
 			// the length of the period, averaged (lowpassed) each pass.
@@ -375,6 +385,73 @@ var breeze = Patch{
 	{opOut, [4]float64{0.9, 0.5}},
 }
 
+// ---- the drum kit (rhythmic moods) ----
+// Each drum is played at a fixed note on its own track, so its trim is
+// baked into its output gain rather than kept in a table like leadTrim.
+// Balanced solo (2026-10-11): the clap within 4 dB of the kick while
+// sounding, the shaker about 9 dB under, as hats sit. TestKitBalance holds
+// looser bounds (6 dB, and 6 to 18 dB under) so retuning a patch has room;
+// re-measure and redate this when a patch changes.
+
+// kick: the pulse's swept sine, falling fast from about 300 Hz to its note
+// (play it near 62 Hz, which leaves the sub to a game's own impacts), plus a
+// few milliseconds of highpassed noise so it still reads on a phone speaker,
+// which cannot play the thump
+var kick = Patch{
+	{opEnv, [4]float64{0.001, 0.22, 0, 0.08}},
+	{opOsc, [4]float64{0, shpSine, 28, 0.02}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.9, 0.5}},
+	{opEnv, [4]float64{0.0005, 0.005, 0, 0.004}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opHpf, [4]float64{2000, 0, 0, 0}},
+	{opOut, [4]float64{0.5, 0.5}},
+}
+
+// clap: three or four quick re-hits (noise under a squared 50 Hz sine, which
+// peaks every 10 ms and falls silent between) for the first 30 ms, then a
+// noise tail and a short swept sine that both swell in after them.
+// Closer to a frame drum than a backbeat snare.
+var clap = Patch{
+	{opEnv, [4]float64{0.001, 0.025, 0, 0.01}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opOsc, [4]float64{-21.65, shpSine, 0, 1}}, // 50 Hz from the clap's note
+	{opMul, [4]float64{}},
+	{opOsc, [4]float64{-21.65, shpSine, 0, 1}}, // twice: sin² keeps the bursts apart
+	{opMul, [4]float64{}},
+	{opHpf, [4]float64{900, 0, 0, 0}},
+	{opOut, [4]float64{1.1, 0.42}},
+	{opEnv, [4]float64{0.05, 0.16, 0, 0.08}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opHpf, [4]float64{1000, 0, 0, 0}},
+	{opLpf, [4]float64{6000, 0, 0, 0}},
+	{opSend, [4]float64{0.15, 0, 0, 0}},
+	{opOut, [4]float64{0.6, 0.42}},
+	{opEnv, [4]float64{0.04, 0.07, 0, 0.04}},
+	{opOsc, [4]float64{0, shpSine, 7, 0.02}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.45, 0.45}},
+}
+
+// shaker: noise band-passed to about 4-8 kHz, 24 dB/octave on the top side
+// (four one-pole lowpasses). Highpassing alone is not enough: white noise puts most of its energy in the top octaves, so without
+// the lowpasses it is a hiss centred near 14 kHz.
+var shaker = Patch{
+	{opEnv, [4]float64{0.004, 0.035, 0, 0.025}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opHpf, [4]float64{4000, 0, 0, 0}},
+	{opHpf, [4]float64{4000, 0, 0, 0}},
+	{opLpf, [4]float64{8000, 0, 0, 0}},
+	{opLpf, [4]float64{8000, 0, 0, 0}},
+	{opLpf, [4]float64{8000, 0, 0, 0}},
+	{opLpf, [4]float64{8000, 0, 0, 0}},
+	{opOut, [4]float64{1.7, 0.62}},
+}
+
 // tension pulse: a soft swept-sine tom, descendant of the techno kick
 var pulse = Patch{
 	{opEnv, [4]float64{0.002, 0.15, 0, 0.08}},
@@ -414,6 +491,12 @@ type Params struct {
 	LeadGate    int     // gate rows for the lead (sustained leads want > 1)
 	Palette     Palette // the mood's patch bank
 	Seed        uint64
+
+	// Drums (drums.go); a mood without a groove leaves them off.
+	Groove   string  // a grooveLib name; "" plays no drums
+	DrumGain float64 // scales every drum hit
+	DrumBusy float64 // 0..1: chance each ? step in the groove plays
+	Swing    float64 // 0..0.25: how far past halfway the off 16th lands
 }
 
 // leadDef is one entry in the lead-instrument library.
@@ -446,6 +529,7 @@ var dungeonLeads = []string{"bell", "chime", "chime", "clang", "kalimba", "pluck
 var overworldLeads = []string{"bell", "bell", "kalimba", "kalimba", "reed", "pluck", "pluck"}
 var meadowLeads = []string{"bell", "kalimba", "kalimba", "reed", "pluck", "pluck"}
 var auroraLeads = []string{"chime", "chime", "bell", "bell", "kalimba"}
+var villageLeads = []string{"kalimba", "kalimba", "pluck", "pluck", "reed"}
 
 // pickLead draws from a separate rng stream so the pattern content for a
 // given seed is unchanged — only the instrument varies.
@@ -479,6 +563,11 @@ var scalesByBrightness = [][]int{
 	{0, 2, 4, 5, 7, 9, 10}, // mixolydian
 	{0, 2, 4, 5, 7, 9, 11}, // major
 	{0, 2, 4, 6, 7, 9, 11}, // lydian
+}
+
+var scalesForVillage = [][]int{
+	{0, 2, 4, 5, 7, 9, 10}, // mixolydian
+	{0, 2, 4, 5, 7, 9, 11}, // major
 }
 
 var scalesForAurora = [][]int{
@@ -606,6 +695,13 @@ type Synth struct {
 	dbus          float64
 	fx            sfx // one-shot lane (sfx.go); the sequencer never sees it
 
+	// drum lanes (drums.go), silent in moods without a groove
+	drums   [nDrums][rows]drumHit
+	dvoices [nDrums]Voice
+	offLeft [nDrums]int // frames until each lane's off 16th; 0 = none armed
+	offGain [nDrums]float64
+	offSeed [nDrums]uint64
+
 	// VU meter tap: read-only from the synthesis path's view — nothing
 	// here feeds back into the samples, so renders stay byte-identical.
 	mlp  [3]float64 // one-pole states at the band edges
@@ -692,17 +788,23 @@ func (s *Synth) apply(p Params) {
 func (s *Synth) step() {
 	if p := s.now.Swap(nil); p != nil {
 		s.apply(*p)
+		// The groove and drum gain follow at once, as swing does; buildDrums
+		// is deterministic for a pattern, so an unchanged groove rebuilds the
+		// same hits.
+		s.drums = buildDrums(s.params, s.pat)
 	}
 	if s.row == 0 {
 		if p := s.next.Swap(nil); p != nil {
 			s.apply(*p)
 		}
 		s.pats = buildPatterns(s.params, s.pat)
+		s.drums = buildDrums(s.params, s.pat)
 	}
 	if g := s.grid.Load(); g != nil {
 		s.applyGrid(g, s.row)
 	}
 	s.rowLog.add(s.nframe, s.row)
+	s.stepDrums()
 	for t := 0; t < nTracks; t++ {
 		v := &s.voices[t]
 		if tr := s.pats[t][s.row]; tr.note != 0 {
@@ -735,6 +837,7 @@ func (s *Synth) frame() (int16, int16) {
 			s.voices[i].run(&l, &r, &s.dbus)
 		}
 	}
+	s.runDrums(&l, &r)
 	s.runShots(&l, &r)
 	// cross-fed stereo delay
 	wl, wr := s.dl[s.dpos], s.dr[s.dpos]
@@ -825,6 +928,18 @@ func (p Params) sanitized() Params {
 	if p.LeadGate < 1 {
 		p.LeadGate = 1
 	}
+	if !(p.DrumGain >= 0) {
+		p.DrumGain = 0
+	}
+	p.DrumGain = min(p.DrumGain, 4)
+	if !(p.DrumBusy >= 0) {
+		p.DrumBusy = 0
+	}
+	p.DrumBusy = min(p.DrumBusy, 1)
+	if !(p.Swing >= 0) {
+		p.Swing = 0
+	}
+	p.Swing = min(p.Swing, 0.25)
 	return p
 }
 
