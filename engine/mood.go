@@ -34,7 +34,7 @@ type mood struct {
 	pad      line
 	bell     line
 	air      line
-	calm     int // the second drone's interval below the chord at low tension
+	calm     int // the second drone's interval from the chord at low tension; positive floats above it
 	bellLift int
 	palette  Palette
 	leads    []string // the seed picks one; repeats are the weights

@@ -127,8 +127,21 @@ func TestMeadowIsBrightest(t *testing.T) {
 			t.Errorf("level %d: meadow bells %v not denser than overworld %v", level, mead.BellDensity, over.BellDensity)
 		}
 	}
-	if p, _ := DeriveMood("meadow", 1, 2, 1); p.FifthOffset != -11 {
-		t.Fatal("meadow tension should reach the same dread interval")
+	if p, _ := DeriveMood("meadow", 1, 2, 0); p.FifthOffset != -3 {
+		t.Fatalf("meadow's calm second voice at %d; want -3, a major sixth over the low drone", p.FifthOffset)
+	}
+}
+
+// Aurora's second voice floats above the chord, and tension sours it in
+// place rather than dropping it more than an octave.
+func TestAuroraTensionStaysAbove(t *testing.T) {
+	for _, c := range []struct {
+		tension float64
+		want    int
+	}{{0, 7}, {0.5, 6}, {1, 1}} {
+		if p, _ := DeriveMood("aurora", 1, 2, c.tension); p.FifthOffset != c.want {
+			t.Errorf("tension %.1f: aurora's second voice at %d, want %d", c.tension, p.FifthOffset, c.want)
+		}
 	}
 }
 

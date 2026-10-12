@@ -408,7 +408,7 @@ type Params struct {
 	BellDensity float64
 	AirGain     float64
 	PulseGain   float64 // tension pulse track level (0 = silent)
-	FifthOffset int     // second drone's interval below the chord; slides dissonant with tension
+	FifthOffset int     // second drone's interval from the chord, usually below; slides dissonant with tension
 	BellLift    int     // semitones added to bell notes (overworld sparkle register)
 	LeadName    string  // which instrument holds the bell slot
 	LeadGate    int     // gate rows for the lead (sustained leads want > 1)
@@ -496,11 +496,17 @@ var scalesForMeadow = [][]int{
 // tenseOffset slides the second drone's interval toward dissonance: the
 // mood's calm interval, then tritone, then minor-ninth territory.
 func tenseOffset(calm int, t float64) int {
+	// A voice floating above the chord (aurora) sours in place, an octave
+	// up, rather than dropping more than an octave to reach the dissonance.
+	up := 0
+	if calm > 0 {
+		up = 12
+	}
 	switch {
 	case t >= 0.75:
-		return -11
+		return -11 + up
 	case t >= 0.4:
-		return -6
+		return -6 + up
 	}
 	return calm
 }
@@ -536,7 +542,9 @@ func buildPatterns(p Params, pat int) [nTracks][rows]trackRow {
 	r := rng{p.Seed ^ uint64(pat)*0x9e3779b97f4a7c15 | 1}
 	chord := p.Root + []int{0, 0, p.Scale[5] - 12, p.Scale[3] - 12}[r.n(4)]
 
-	out[0][0] = trackRow{chord - 12, p.DroneGain, rows, p.Palette.Drone}
+	if p.DroneGain > 0.01 { // aurora has none; don't run a silent voice
+		out[0][0] = trackRow{chord - 12, p.DroneGain, rows, p.Palette.Drone}
+	}
 	if p.FifthGain > 0.01 {
 		// pad patch (sine pair), not the saw drone: the fifth should
 		// thicken with depth, not brighten

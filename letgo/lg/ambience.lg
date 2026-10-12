@@ -90,11 +90,13 @@
 
 (defn tense-offset
   "Slide the second drone's interval toward dissonance: the mood's calm
-  interval, then tritone, then minor-ninth territory."
+  interval, then tritone, then minor-ninth territory. A voice floating above
+  the chord sours in place, an octave up."
   [calm t]
-  (cond (>= t 0.75) -11
-        (>= t 0.4)  -6
-        :else       calm))
+  (let [up (if (pos? calm) 12 0)]
+    (cond (>= t 0.75) (+ -11 up)
+          (>= t 0.4)  (+ -6 up)
+          :else       calm)))
 
 (defn seed-state
   "The derivation rng's starting state, mixing seed with the level."
