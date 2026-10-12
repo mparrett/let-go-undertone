@@ -65,14 +65,8 @@ func buildDrums(p Params, pat int) [nDrums][rows]drumHit {
 	fill := 0.15 + 0.6*p.PulseGain
 	for d := range g {
 		for i := 0; i < 2*rows; i++ {
-			var v float64
+			v := drumLevel(g[d][i])
 			switch g[d][i] {
-			case 'X':
-				v = 1
-			case 'x':
-				v = 0.7
-			case 'o':
-				v = 0.4
 			case '?':
 				if r.f() < p.DrumBusy {
 					v = 0.45
@@ -90,6 +84,19 @@ func buildDrums(p Params, pat int) [nDrums][rows]drumHit {
 		}
 	}
 	return out
+}
+
+// drumLevel is the velocity of a fixed groove step: X, x or o; 0 otherwise.
+func drumLevel(c byte) float64 {
+	switch c {
+	case 'X':
+		return 1
+	case 'x':
+		return 0.7
+	case 'o':
+		return 0.4
+	}
+	return 0
 }
 
 // stepDrums plays the drums' on-row hits and arms the off 16ths.
