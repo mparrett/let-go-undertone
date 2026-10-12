@@ -72,19 +72,31 @@
    [0 2 4 5 7 9 11]   ; major
    [0 2 4 6 7 9 11]]) ; lydian
 
+(def scales-for-meadow
+  [[0 2 4 5 7 9 11]   ; major
+   [0 2 4 5 7 9 11]   ; major
+   [0 2 4 6 7 9 11]]) ; lydian
+
+(def scales-for-aurora
+  [[0 2 4 6 7 9 11]]) ; lydian, all the way up
+
 (def root-offsets [-2 0 0 3])
 
 ;; mood-weighted lead audition lists; repeats are the weights
 (def dungeon-leads   [:bell :chime :chime :clang :kalimba :pluck :pluck])
 (def overworld-leads [:bell :bell :kalimba :kalimba :reed :pluck :pluck])
+(def meadow-leads    [:bell :kalimba :kalimba :reed :pluck :pluck])
+(def aurora-leads    [:chime :chime :bell :bell :kalimba])
 
 (defn tense-offset
   "Slide the second drone's interval toward dissonance: the mood's calm
-  interval, then tritone, then minor-ninth territory."
+  interval, then tritone, then minor-ninth territory. A voice floating above
+  the chord sours in place, an octave up."
   [calm t]
-  (cond (>= t 0.75) -11
-        (>= t 0.4)  -6
-        :else       calm))
+  (let [up (if (pos? calm) 12 0)]
+    (cond (>= t 0.75) (+ -11 up)
+          (>= t 0.4)  (+ -6 up)
+          :else       calm)))
 
 (defn seed-state
   "The derivation rng's starting state, mixing seed with the level."
@@ -101,68 +113,110 @@
 (defn clamp01 [t] (max 0.0 (min 1.0 (double t))))
 
 (defn scale-for [tables level]
-  (nth tables (min (quot level 2) (dec (count tables)))))
+  (nth tables (max 0 (min (quot level 2) (dec (count tables))))))
 
-;; ---- the two moods ----
-;; Depth says where you are, tension says what is happening. tension 0
-;; reproduces the pre-tension output exactly: it takes no extra rng draws.
+;; ---- the moods ----
+;; A mood is a patch bank (chosen Go-side by :mood) plus a point in parameter
+;; space and how it moves with level. Each line is base + step*level, clamped
+;; by :lo/:hi where present. Tension works the same in every mood, so it is not
+;; in the table: tempo up, a low pulse fading in, the harmony souring, the calm
+;; layers thinning. tension 0 reproduces the pre-tension output exactly: it
+;; takes no extra rng draws. Mirrors engine/mood.go; the parity test holds the
+;; two to the same bits.
 
-(defn derive-dungeon
-  "Deeper is darker, slower, thicker. Tension raises tempo, fades a low pulse
-  track in, sours the harmony, and thins the calm layers."
-  [seed depth tension]
-  (let [d (double depth)
-        t (clamp01 tension)
-        s (seed-state seed depth)
-        [s bpm-jitter] (draw-n s 5)
-        [_ root-off]   (draw-pick s root-offsets)]
-    {:mood         :dungeon
-     :seed         seed
-     :bpm          (+ (max 46.0 (- 66.0 (* 3.0 d))) (double bpm-jitter) (* 30.0 t))
-     :root         (+ (- 57 depth) root-off)
-     :scale        (scale-for scales-by-darkness depth)
-     :drone-gain   (min 0.9 (+ 0.55 (* 0.06 d)))
-     :fifth-gain   (+ (min 0.7 (* 0.2 d)) (* 0.25 t))
-     :pad-density  (* (- 0.6 (* 0.05 d)) (- 1.0 (* 0.6 t)))
-     :bell-density (* (max 0.04 (- 0.16 (* 0.02 d))) (- 1.0 (* 0.5 t)))
-     :air-gain     (+ (min 0.6 (+ 0.25 (* 0.05 d))) (* 0.1 t))
-     :pulse-gain   t
-     :fifth-offset (tense-offset -5 t) ; perfect fifth above the low drone
-     :bell-lift    0
-     :lead         (pick-lead seed dungeon-leads)}))
+(def moods
+  {;; Deeper is darker, slower, thicker.
+   :dungeon
+   {:scales    scales-by-darkness
+    :bpm       {:base 66.0 :step -3.0 :lo 46.0}
+    :root-base 57 :root-step -1
+    :drone     {:base 0.55 :step 0.06 :hi 0.9}
+    :fifth     {:base 0.0 :step 0.2 :hi 0.7}
+    :pad       {:base 0.6 :step -0.05}
+    :bell      {:base 0.16 :step -0.02 :lo 0.04}
+    :air       {:base 0.25 :step 0.05 :hi 0.6}
+    :calm      -5 ; perfect fifth above the low drone
+    :bell-lift 0
+    :leads     dungeon-leads}
+   ;; The bright mirror: elevation raises and opens (mixolydian -> major ->
+   ;; lydian, higher root, denser lifted bells, breeze instead of rumble).
+   :overworld
+   {:scales    scales-by-brightness
+    :bpm       {:base 74.0 :step 3.0}
+    :root-base 62 :root-step 1
+    :drone     {:base 0.25 :step 0.03}
+    :fifth     {:base 0.3 :step 0.05}
+    :pad       {:base 0.7 :step 0.0}
+    :bell      {:base 0.2 :step 0.04}
+    :air       {:base 0.15 :step 0.02}
+    :calm      -8 ; major third above: sunshine
+    :bell-lift 12
+    :leads     overworld-leads}
+   ;; Overworld without the floor: near-silent drone, high root, dense
+   ;; lifted bells, the second drone a major sixth up.
+   :meadow
+   {:scales    scales-for-meadow
+    :bpm       {:base 88.0 :step 2.0 :hi 100.0}
+    :root-base 67 :root-step 0
+    :drone     {:base 0.12 :step 0.0}
+    :fifth     {:base 0.25 :step 0.03 :hi 0.4}
+    :pad       {:base 0.5 :step 0.0}
+    :bell      {:base 0.3 :step 0.03 :hi 0.45}
+    :air       {:base 0.2 :step 0.02 :hi 0.3}
+    :calm      -3 ; major sixth above the low drone
+    :bell-lift 12
+    :leads     meadow-leads}
+   ;; Thin, not warm: no drone, slow lydian veils through the delay, a
+   ;; fifth floating over the chord, the odd chime.
+   :aurora
+   {:scales    scales-for-aurora
+    :bpm       {:base 52.0 :step 1.0 :hi 58.0}
+    :root-base 69 :root-step 1
+    :drone     {:base 0.0 :step 0.0}
+    :fifth     {:base 0.3 :step 0.02 :hi 0.4}
+    :pad       {:base 0.75 :step 0.02 :hi 0.85}
+    :bell      {:base 0.08 :step 0.01 :hi 0.14}
+    :air       {:base 0.3 :step 0.03 :hi 0.45}
+    :calm      7 ; a fifth above the chord
+    :bell-lift 0
+    :leads     aurora-leads}})
 
-(defn derive-overworld
-  "The bright mirror: elevation raises and opens (mixolydian -> major ->
-  lydian, higher root, denser lifted bells, breeze instead of rumble).
-  Tension works unchanged — brightness collapsing into the same dread."
-  [seed elevation tension]
-  (let [e (double elevation)
-        t (clamp01 tension)
-        s (seed-state seed elevation)
-        [s bpm-jitter] (draw-n s 5)
-        [_ root-off]   (draw-pick s root-offsets)]
-    {:mood         :overworld
-     :seed         seed
-     :bpm          (+ 74.0 (* 3.0 e) (double bpm-jitter) (* 30.0 t))
-     :root         (+ 62 elevation root-off)
-     :scale        (scale-for scales-by-brightness elevation)
-     :drone-gain   (+ 0.25 (* 0.03 e))
-     :fifth-gain   (+ 0.3 (* 0.05 e) (* 0.25 t))
-     :pad-density  (* 0.7 (- 1.0 (* 0.6 t)))
-     :bell-density (* (+ 0.2 (* 0.04 e)) (- 1.0 (* 0.5 t)))
-     :air-gain     (+ 0.15 (* 0.02 e) (* 0.1 t))
-     :pulse-gain   t
-     :fifth-offset (tense-offset -8 t) ; major third above: sunshine
-     :bell-lift    12
-     :lead         (pick-lead seed overworld-leads)}))
+(defn line-at
+  "Evaluate a mood line at level x."
+  [{:keys [base step lo hi]} x]
+  (let [v (+ base (* step x))
+        v (if lo (max lo v) v)]
+    (if hi (min hi v) v)))
 
 (defn derive-mood
   "Derive with the mood named explicitly. This is the real entry point; the
-  signed-depth sugar below cannot reach every state."
+  signed-depth sugar below cannot reach every state. An unknown mood derives
+  as the dungeon."
   [mood seed level tension]
-  (if (= mood :overworld)
-    (derive-overworld seed level tension)
-    (derive-dungeon seed level tension)))
+  (let [m (get moods mood (:dungeon moods))
+        mood (if (contains? moods mood) mood :dungeon)
+        l (double level)
+        t (clamp01 tension)
+        s (seed-state seed level)
+        [s bpm-jitter] (draw-n s 5)
+        [_ root-off]   (draw-pick s root-offsets)]
+    {:mood         mood
+     :seed         seed
+     :bpm          (+ (line-at (:bpm m) l) (double bpm-jitter) (* 30.0 t))
+     :root         (+ (:root-base m) (* (:root-step m) level) root-off)
+     :scale        (scale-for (:scales m) level)
+     :drone-gain   (line-at (:drone m) l)
+     :fifth-gain   (+ (line-at (:fifth m) l) (* 0.25 t))
+     :pad-density  (* (line-at (:pad m) l) (- 1.0 (* 0.6 t)))
+     :bell-density (* (line-at (:bell m) l) (- 1.0 (* 0.5 t)))
+     :air-gain     (+ (line-at (:air m) l) (* 0.1 t))
+     :pulse-gain   t
+     :fifth-offset (tense-offset (:calm m) t)
+     :bell-lift    (:bell-lift m)
+     :lead         (pick-lead seed (:leads m))}))
+
+(defn derive-dungeon [seed depth tension] (derive-mood :dungeon seed depth tension))
+(defn derive-overworld [seed elevation tension] (derive-mood :overworld seed elevation tension))
 
 (defn derive
   "Signed-depth sugar, same as the CLI: a negative depth means overworld

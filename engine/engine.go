@@ -338,6 +338,21 @@ var reed = Patch{
 	{opOut, [4]float64{0.22, 0.5}},
 }
 
+// aurora pad: the pad's sine pair, swelling slowly and fading long, with a
+// send so the delay bus smears it into a sky-wide wash
+var veil = Patch{
+	{opEnv, [4]float64{3, 2, 0.7, 4}},
+	{opOsc, [4]float64{-0.07, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opSend, [4]float64{0.2, 0, 0, 0}},
+	{opOut, [4]float64{0.25, 0.3}},
+	{opEnv, [4]float64{3.4, 2, 0.7, 4}},
+	{opOsc, [4]float64{0.07, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opSend, [4]float64{0.2, 0, 0, 0}},
+	{opOut, [4]float64{0.25, 0.7}},
+}
+
 // overworld drone: sine pair — a bed, not a weight
 var bed = Patch{
 	{opEnv, [4]float64{3, 2, 1, 4}},
@@ -393,7 +408,7 @@ type Params struct {
 	BellDensity float64
 	AirGain     float64
 	PulseGain   float64 // tension pulse track level (0 = silent)
-	FifthOffset int     // second drone's interval below the chord; slides dissonant with tension
+	FifthOffset int     // second drone's interval from the chord, usually below; slides dissonant with tension
 	BellLift    int     // semitones added to bell notes (overworld sparkle register)
 	LeadName    string  // which instrument holds the bell slot
 	LeadGate    int     // gate rows for the lead (sustained leads want > 1)
@@ -429,6 +444,8 @@ var leadTrim = map[string]float64{
 // timbre: two seeds differ in instrument, not just notes)
 var dungeonLeads = []string{"bell", "chime", "chime", "clang", "kalimba", "pluck", "pluck"}
 var overworldLeads = []string{"bell", "bell", "kalimba", "kalimba", "reed", "pluck", "pluck"}
+var meadowLeads = []string{"bell", "kalimba", "kalimba", "reed", "pluck", "pluck"}
+var auroraLeads = []string{"chime", "chime", "bell", "bell", "kalimba"}
 
 // pickLead draws from a separate rng stream so the pattern content for a
 // given seed is unchanged — only the instrument varies.
@@ -450,6 +467,7 @@ type Palette struct {
 
 var dungeonPalette = Palette{Drone: drone, Fifth: pad, Pad: pad, Bell: bell, Air: air, Pulse: pulse}
 var overworldPalette = Palette{Drone: bed, Fifth: pad, Pad: pad, Bell: bell, Air: breeze, Pulse: pulse}
+var auroraPalette = Palette{Drone: bed, Fifth: veil, Pad: veil, Bell: bell, Air: breeze, Pulse: pulse}
 
 var scalesByDarkness = [][]int{
 	{0, 2, 3, 5, 7, 9, 10}, // dorian
@@ -463,77 +481,34 @@ var scalesByBrightness = [][]int{
 	{0, 2, 4, 6, 7, 9, 11}, // lydian
 }
 
+var scalesForAurora = [][]int{
+	{0, 2, 4, 6, 7, 9, 11}, // lydian, all the way up
+}
+
+// The meadow stays major longer and turns lydian only high up: its
+// brightness is register and air, not the mode.
+var scalesForMeadow = [][]int{
+	{0, 2, 4, 5, 7, 9, 11}, // major
+	{0, 2, 4, 5, 7, 9, 11}, // major
+	{0, 2, 4, 6, 7, 9, 11}, // lydian
+}
+
 // tenseOffset slides the second drone's interval toward dissonance: the
 // mood's calm interval, then tritone, then minor-ninth territory.
 func tenseOffset(calm int, t float64) int {
+	// A voice floating above the chord (aurora) sours in place, an octave
+	// up, rather than dropping more than an octave to reach the dissonance.
+	up := 0
+	if calm > 0 {
+		up = 12
+	}
 	switch {
 	case t >= 0.75:
-		return -11
+		return -11 + up
 	case t >= 0.4:
-		return -6
+		return -6 + up
 	}
 	return calm
-}
-
-// DeriveDungeon maps game state to music. Depth darkens (where you are);
-// tension 0..1 agitates (what's happening): tempo up, pulse in, the second
-// drone slides fifth -> tritone -> minor ninth, calm layers thin out.
-// tension 0 reproduces the pre-tension output exactly (no extra rng draws).
-func DeriveDungeon(seed uint64, depth int, tension float64) Params {
-	r := rng{seed ^ uint64(depth)*0x9e3779b97f4a7c15 | 1}
-	d := float64(depth)
-	t := math.Max(0, math.Min(1, tension))
-	darkness := depth / 2
-	if darkness >= len(scalesByDarkness) {
-		darkness = len(scalesByDarkness) - 1
-	}
-	p := Params{
-		BPM:         math.Max(46, 66-float64(3*d)) + float64(r.n(5)) + float64(30*t),
-		Root:        57 - depth + []int{-2, 0, 0, 3}[r.n(4)],
-		Scale:       scalesByDarkness[darkness],
-		DroneGain:   math.Min(0.9, 0.55+float64(0.06*d)),
-		FifthGain:   math.Min(0.7, 0.2*d) + float64(0.25*t),
-		PadDensity:  (0.6 - float64(0.05*d)) * (1 - float64(0.6*t)),
-		BellDensity: math.Max(0.04, 0.16-float64(0.02*d)) * (1 - float64(0.5*t)),
-		AirGain:     math.Min(0.6, 0.25+float64(0.05*d)) + float64(0.1*t),
-		PulseGain:   t,
-		FifthOffset: tenseOffset(-5, t), // perfect fifth above the low drone
-		Palette:     dungeonPalette,
-		Seed:        seed,
-	}
-	pickLead(&p, dungeonLeads)
-	return p
-}
-
-// DeriveOverworld is the bright mirror: elevation raises and opens
-// (mixolydian -> major -> lydian, higher root, denser lifted bells,
-// breeze instead of rumble); tension works unchanged — brightness
-// collapsing into the same tritone/minor-ninth dread.
-func DeriveOverworld(seed uint64, elevation int, tension float64) Params {
-	r := rng{seed ^ uint64(elevation)*0x9e3779b97f4a7c15 | 1}
-	e := float64(elevation)
-	t := math.Max(0, math.Min(1, tension))
-	brightness := elevation / 2
-	if brightness >= len(scalesByBrightness) {
-		brightness = len(scalesByBrightness) - 1
-	}
-	p := Params{
-		BPM:         74 + float64(3*e) + float64(r.n(5)) + float64(30*t),
-		Root:        62 + elevation + []int{-2, 0, 0, 3}[r.n(4)],
-		Scale:       scalesByBrightness[brightness],
-		DroneGain:   0.25 + float64(0.03*e),
-		FifthGain:   0.3 + float64(0.05*e) + float64(0.25*t),
-		PadDensity:  0.7 * (1 - float64(0.6*t)),
-		BellDensity: (0.2 + float64(0.04*e)) * (1 - float64(0.5*t)),
-		AirGain:     0.15 + float64(0.02*e) + float64(0.1*t),
-		PulseGain:   t,
-		FifthOffset: tenseOffset(-8, t), // major third above the low drone: sunshine
-		BellLift:    12,
-		Palette:     overworldPalette,
-		Seed:        seed,
-	}
-	pickLead(&p, overworldLeads)
-	return p
 }
 
 // ---- generative sequencer ----
@@ -567,7 +542,9 @@ func buildPatterns(p Params, pat int) [nTracks][rows]trackRow {
 	r := rng{p.Seed ^ uint64(pat)*0x9e3779b97f4a7c15 | 1}
 	chord := p.Root + []int{0, 0, p.Scale[5] - 12, p.Scale[3] - 12}[r.n(4)]
 
-	out[0][0] = trackRow{chord - 12, p.DroneGain, rows, p.Palette.Drone}
+	if p.DroneGain > 0.01 { // aurora has none; don't run a silent voice
+		out[0][0] = trackRow{chord - 12, p.DroneGain, rows, p.Palette.Drone}
+	}
 	if p.FifthGain > 0.01 {
 		// pad patch (sine pair), not the saw drone: the fifth should
 		// thicken with depth, not brighten

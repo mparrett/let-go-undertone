@@ -45,16 +45,13 @@ func TestLgDerivationMatchesGo(t *testing.T) {
 	c, m := lgRuntime(t)
 
 	for _, seed := range []uint64{1, 7, 42} {
-		for _, depth := range []int{0, 1, 2, 3, 5, 8} {
+		for _, depth := range []int{-5, -2, 0, 1, 2, 3, 5, 8} {
 			for _, tension := range []float64{0, 0.3, 0.6, 1} {
-				for _, mood := range []string{"dungeon", "overworld"} {
+				for _, mood := range engine.MoodNames() {
 					// Name the mood explicitly rather than going through the
 					// signed-depth sugar, which cannot express overworld at
 					// elevation 0 (-0 is 0, so it routes to dungeon).
-					want := engine.DeriveDungeon(seed, depth, tension)
-					if mood == "overworld" {
-						want = engine.DeriveOverworld(seed, depth, tension)
-					}
+					want, _ := engine.DeriveMood(mood, seed, depth, tension)
 					name := fmt.Sprintf("%s/seed%d/depth%d/tension%.1f", mood, seed, depth, tension)
 
 					// A fresh base per case, so a field the lg map forgets to
