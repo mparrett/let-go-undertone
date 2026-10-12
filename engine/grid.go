@@ -9,15 +9,22 @@ const Steps = rows
 // octave.
 const Degrees = 8
 
+// DrumLanes is the number of drum lanes: kick, clap, shaker.
+const DrumLanes = nDrums
+
 // Grid is a hand-written pattern the synth plays in place of its generator.
 // Melodic lanes hold a scale degree per step (1..Degrees, 0 = rest), so a
 // grid stays in key when the mood or root changes. Lead and bass replace the
-// generator's lead and fifth voices; pulse replaces its tension pulse. With
-// Bed set, the generator keeps playing drone, pad and air underneath.
+// generator's lead and fifth voices; pulse replaces its tension pulse. Drums
+// replace the generator's drums, one lane each for kick, clap and shaker, in
+// groove notation: 2*Steps sixteenths of X (accent), x (hit), o (ghost) or .
+// (rest); a short lane rests for the remainder. With Bed set, the generator
+// keeps playing drone, pad and air underneath.
 type Grid struct {
 	Lead  [Steps]int
 	Bass  [Steps]int
 	Pulse [Steps]bool
+	Drums [DrumLanes]string
 	Bed   bool
 }
 
@@ -72,6 +79,7 @@ const (
 	gridBassGain  = 3.4  // pluck two octaves down: a string bass
 	gridPulseGain = 1.1  //
 	gridBedScale  = 0.75 // the generator's drone, pad and air, under a grid
+	gridDrumGain  = 0.8  // a seeded village groove, about -22 dB: level with the bed (2026-10-12)
 )
 
 var gridBass = pluck
@@ -91,14 +99,8 @@ func (s *Synth) applyGrid(g *Grid, row int) {
 			s.voices[t].gate = false
 		}
 	}
-	// the generator's drums are part of the bed
-	for d := range s.drums {
-		if g.Bed {
-			s.drums[d][row].on *= gridBedScale
-			s.drums[d][row].off *= gridBedScale
-		} else {
-			s.drums[d][row] = drumHit{}
-		}
+	for d, lane := range g.Drums {
+		s.drums[d][row] = drumHit{gridDrumGain * drumAt(lane, 2*row), gridDrumGain * drumAt(lane, 2*row+1)}
 	}
 	s.pats[trackLead][row] = trackRow{}
 	if d := g.Lead[row]; d > 0 {
@@ -144,7 +146,37 @@ func SeedGrid(p Params) Grid {
 	if r.f() < 0.5 {
 		g.Pulse[12] = true
 	}
+	// The mood's groove, written out: its chance steps (busy steps and fills)
+	// drawn once, after everything above, so drums never shift a seed's lead
+	// or bass. Each level is written as the nearest symbol the grid has.
+	if groove, ok := grooveLib[p.Groove]; ok {
+		for d, lane := range groove {
+			b := []byte(lane)
+			for i := range b {
+				switch v := stepLevel(b[i], p, &r); {
+				case v >= 0.85:
+					b[i] = 'X'
+				case v >= 0.55:
+					b[i] = 'x'
+				case v > 0:
+					b[i] = 'o'
+				default:
+					b[i] = '.'
+				}
+			}
+			g.Drums[d] = string(b)
+		}
+	}
 	return g
+}
+
+// drumAt is the level of sixteenth i in a grid drum lane; anything but an
+// accent, hit or ghost rests.
+func drumAt(lane string, i int) float64 {
+	if i >= len(lane) {
+		return 0
+	}
+	return drumLevel(lane[i])
 }
 
 // RowAt reports which grid row was sounding at a given output frame, for a

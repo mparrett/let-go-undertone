@@ -163,16 +163,71 @@ func TestGrooveLeavesMelodyAlone(t *testing.T) {
 	}
 }
 
-// Under a grid the drums are part of the bed: turn the bed off and they stop.
-func TestGridBedCarriesDrums(t *testing.T) {
-	p, _ := DeriveMood("village", 2, 3, 0)
-	s := NewSynth(p)
-	s.SetGrid(&Grid{Bed: false})
-	s.Read(make([]byte, SampleRate*4*3))
-	for d, v := range s.dvoices {
-		if v.active {
-			t.Errorf("drum lane %d sounds with the bed off", d)
+// Under a grid the drums are the grid's lanes, not the bed's: a village grid
+// with empty drum lanes is silent there even with the bed on, and a grid in a
+// mood without drums plays the ones it writes.
+func TestGridOwnsDrums(t *testing.T) {
+	sounding := func(mood string, g Grid) bool {
+		p, _ := DeriveMood(mood, 2, 3, 0)
+		s := NewSynth(p)
+		s.SetGrid(&g)
+		var any bool
+		// a quarter row of frames per read (4 bytes a frame), so a short hit
+		// can't start and finish between checks; 4*rows reads is one pattern
+		buf := make([]byte, 4*(s.samplesPerRow/4))
+		for range 4 * rows {
+			s.Read(buf)
+			for _, v := range s.dvoices {
+				any = any || v.active
+			}
 		}
+		return any
+	}
+	if sounding("village", Grid{Bed: true}) {
+		t.Error("village's generated drums play under a grid with empty drum lanes")
+	}
+	if !sounding("aurora", Grid{Drums: [DrumLanes]string{"x...x...x...x..."}}) {
+		t.Error("a kick written in an aurora grid stays silent")
+	}
+}
+
+// SeedGrid writes the mood's groove into the drum lanes, and only into them:
+// the lead and bass a seed gives are the same with or without a groove.
+func TestSeedGridWritesTheGroove(t *testing.T) {
+	p, _ := DeriveMood("village", 7, 3, 0)
+	g := SeedGrid(p)
+	for d, lane := range g.Drums {
+		if len(lane) != 2*Steps || strings.Trim(lane, "Xxo.") != "" {
+			t.Errorf("drum lane %d = %q; want %d steps of X, x, o or .", d, lane, 2*Steps)
+		}
+	}
+	if !strings.ContainsAny(g.Drums[0], "Xx") {
+		t.Error("village's seeded kick lane has no hits")
+	}
+	bare := p
+	bare.Groove = ""
+	h := SeedGrid(bare)
+	if g.Lead != h.Lead || g.Bass != h.Bass || g.Pulse != h.Pulse {
+		t.Error("seeding the drums changed the lead, bass or pulse")
+	}
+	// fills come through too: at full tension most of them play
+	fills := 0
+	for seed := uint64(1); seed <= 20; seed++ {
+		q, _ := DeriveMood("village", seed, 3, 1)
+		sg, groove := SeedGrid(q), grooveLib[q.Groove]
+		for d := range groove {
+			for i := range groove[d] {
+				if groove[d][i] == 'f' && sg.Drums[d][i] != '.' {
+					fills++
+				}
+			}
+		}
+	}
+	if fills == 0 {
+		t.Error("no seeded village grid at full tension has a fill")
+	}
+	if h.Drums != [DrumLanes]string{} {
+		t.Errorf("a mood without a groove seeded drums %q", h.Drums)
 	}
 }
 
