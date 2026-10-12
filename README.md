@@ -52,9 +52,11 @@ Out-of-range parameters are clamped rather than trusted, since they often come
 from lg code or a page.
 
 The sequencer is a 16-row tracker underneath. `Synth.SetGrid` hands it a
-written pattern (lead and bass lanes of scale degrees, a pulse lane) to play
-in place of the generated one, optionally over the generated drone, pad and
-air; `SeedGrid` derives a starting pattern from a seed. The
+written pattern (lead and bass lanes of scale degrees, a pulse lane, and
+kick, clap and shaker lanes of sixteenths in groove notation) to play in place
+of the generated one, optionally over the generated drone, pad and air;
+`SeedGrid` derives a starting pattern from a seed, writing out the mood's
+groove if it has one. The
 [grid example](examples/grid) is a step sequencer built on it.
 
 One-shots run beside the sequencer in an 8-voice pool that the sequencer never

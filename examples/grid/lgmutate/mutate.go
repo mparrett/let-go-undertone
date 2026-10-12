@@ -53,7 +53,7 @@ func (m *Mutator) Mutate(g engine.Grid, seed int) (engine.Grid, error) {
 	if !ok || len(parts) != 3 || len(parts[0]) != engine.Steps || len(parts[1]) != engine.Steps || len(parts[2]) != engine.Steps {
 		return g, fmt.Errorf("grid/mutate returned %v", v)
 	}
-	out := engine.Grid{Bed: g.Bed}
+	out := engine.Grid{Bed: g.Bed, Drums: g.Drums} // lg varies the melodic lanes only
 	for i := 0; i < engine.Steps; i++ {
 		out.Lead[i] = int(parts[0][i] - '0')
 		out.Bass[i] = int(parts[1][i] - '0')

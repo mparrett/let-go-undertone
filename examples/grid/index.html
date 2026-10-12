@@ -7,7 +7,7 @@
 <style>
   :root {
     --bg: #0d0d10; --panel: #15151a; --line: #26262e; --fg: #d6d1c2; --mut: #8a8576;
-    --lead: #e0b84f; --bass: #5fa8c9; --pulse: #c96a5f; --head: #ffffff14;
+    --lead: #e0b84f; --bass: #5fa8c9; --pulse: #c96a5f; --drum: #9cc46a; --head: #ffffff14;
     /* phones: as wide as the screen allows */
     --cell: clamp(17px, calc((100vw - 32px - 32px - 3 * 6px) / 16), 40px);
   }
@@ -53,6 +53,10 @@
   .lead .c.on::after { background: var(--lead); border-color: var(--lead); }
   .bass .c.on::after { background: var(--bass); border-color: var(--bass); }
   .pulse .c.on::after { background: var(--pulse); border-color: var(--pulse); }
+  /* drum cells are sixteenths, two per step; shade is velocity: ghost, hit, accent */
+  .drums .c.on::after { background: var(--drum); border-color: var(--drum); }
+  .drums .c.v1::after { opacity: .4; }
+  .drums .c.v2::after { opacity: .75; }
   .c.on.head::after { filter: brightness(1.35); }
   .lead .tonic::after, .bass .tonic::after { border-color: #3a3a46; }
 
@@ -62,10 +66,10 @@
   footer { margin: 4px 0 10px; font-size: 12px; color: var(--mut); }
   @media (max-width: 899px) { footer { order: 9; } aside { display: contents; } main { display: flex; flex-direction: column; } section { order: 5; } }
   footer a { color: var(--mut); }
-  /* wide screens: controls beside the grid, and cells sized so all 17 rows
+  /* wide screens: controls beside the grid, and cells sized so all 20 rows
      fit the window's height without scrolling */
   @media (min-width: 900px) {
-    :root { --cell: clamp(20px, calc((100dvh - 150px) / 17 - 2px), 46px); }
+    :root { --cell: clamp(20px, calc((100dvh - 180px) / 20 - 2px), 46px); }
     body { padding: 32px; }
     main { max-width: none; display: grid; grid-template-columns: 250px auto; gap: 40px; justify-content: center; align-items: start; }
     .lbl { font-size: 12px; }
@@ -94,6 +98,7 @@
   </div>
   <footer>Tap a cell to place a note, tap it again to clear; drag to paint. One note per step in each lane.
     Rows are scale degrees, so the pattern stays in key when the mood changes.
+    Drum cells are sixteenths: a tap cycles hit, accent, ghost, rest.
     Space plays and stops on a keyboard. Edits are heard the next time the playhead passes them.</footer>
  </aside>
  <section>
@@ -104,13 +109,20 @@
   <div class="grid bass" id="bass"></div>
   <div class="lane">PULSE</div>
   <div class="grid pulse" id="pulse"></div>
+  <div class="lane">DRUMS</div>
+  <div class="grid drums" id="drums"></div>
 
  </section>
 </main>
 
 <script src="wasm_exec.js"></script>
 <script>
-  const STEPS = 16, DEG = 8;
+  const STEPS = 16, DEG = 8, SIXTEENTHS = 2 * STEPS;
+  const DRUMS = ["kick", "clap", "shkr"];
+  const TAP = { ".": "x", x: "X", X: "o", o: "." }; // what a tap turns a drum cell into
+  const LEVEL = { o: 1, x: 2, X: 3 };
+  // drum lanes as arrays of single characters, padded to a full pattern
+  const lanes = (ds) => DRUMS.map((_, d) => [...((ds && ds[d]) || "").padEnd(SIXTEENTHS, ".").slice(0, SIXTEENTHS)]);
   const MOODS = ["village", "aurora", "meadow", "overworld", "ruins", "dungeon"];
   const VOICES = ["kalimba", "bell", "chime", "pluck", "reed", "clang"];
   const $ = (id) => document.getElementById(id);
@@ -118,14 +130,16 @@
 
   // State lives here; the wasm side only hears about changes.
   let st = { bpm: 110, mood: "overworld", voice: "kalimba", seed: 1, bed: true,
-             lead: Array(STEPS).fill(0), bass: Array(STEPS).fill(0), pulse: Array(STEPS).fill(false) };
-  let playing = false, ready = false;
+             lead: Array(STEPS).fill(0), bass: Array(STEPS).fill(0), pulse: Array(STEPS).fill(false), drums: lanes() };
+  let playing = false, ready = false, linkHasDrums = false;
 
-  // ---- share links: #v1;t=110;m=o;v=kalimba;s=1;bed=1;L=...;B=...;P=hex ----
+  // ---- share links: #v1;t=110;m=o;v=kalimba;s=1;bed=1;L=...;B=...;P=hex;D=kick,clap,shaker ----
+  // D came later; a link without it takes its drums from the mood's groove.
+  const drumStrings = () => st.drums.map((a) => a.join(""));
   function encode() {
     const pulse = st.pulse.reduce((n, on, i) => n | (on ? 1 << i : 0), 0);
     return `#v1;t=${st.bpm};m=${st.mood[0]};v=${st.voice};s=${st.seed};bed=${+st.bed};` +
-           `L=${st.lead.join("")};B=${st.bass.join("")};P=${pulse.toString(16)}`;
+           `L=${st.lead.join("")};B=${st.bass.join("")};P=${pulse.toString(16)};D=${drumStrings().join(",")}`;
   }
   function decode(h) {
     if (!h.startsWith("#v1;")) return false;
@@ -134,7 +148,10 @@
     const L = digits(kv.L), B = digits(kv.B);
     if (!L || !B) return false;
     const p = parseInt(kv.P || "0", 16);
+    const D = (kv.D || "").split(",");
+    linkHasDrums = D.length === DRUMS.length && D.every((s) => /^[Xxo.]*$/.test(s));
     st = { ...st, lead: L, bass: B, pulse: [...Array(STEPS)].map((_, i) => !!(p & (1 << i))),
+           drums: lanes(linkHasDrums ? D : null),
            bpm: Math.min(160, Math.max(60, +kv.t || 110)), mood: MOODS.find((m) => m[0] === kv.m) || "overworld",
            voice: VOICES.includes(kv.v) ? kv.v : "kalimba", seed: +kv.s || 1, bed: kv.bed !== "0" };
     return true;
@@ -156,9 +173,31 @@
   }
   build("lead", DEG); build("bass", DEG); build("pulse", 1);
 
+  // Drum lanes: one row per drum, two cells per step, beats grouped as above.
+  (function buildDrums() {
+    const el = $("drums"), half = "calc(var(--cell) / 2)";
+    el.style.gridTemplateColumns = "32px " + [...Array(SIXTEENTHS)]
+      .map((_, i) => i && i % 8 === 0 ? `calc(${half} + 6px)` : half).join(" ");
+    DRUMS.forEach((name, d) => {
+      const lbl = document.createElement("div"); lbl.className = "lbl"; lbl.textContent = name; el.appendChild(lbl);
+      for (let i = 0; i < SIXTEENTHS; i++) {
+        const c = document.createElement("div");
+        c.className = "c" + (i && i % 8 === 0 ? " g4" : "");
+        c.dataset.lane = "drums"; c.dataset.drum = d; c.dataset.i = i; c.dataset.step = i >> 1; // step: the playhead's
+        el.appendChild(c);
+      }
+    });
+  })();
+
   function paint() {
     for (const c of document.querySelectorAll(".c")) {
       const s = +c.dataset.step, lane = c.dataset.lane;
+      if (lane === "drums") {
+        const lv = LEVEL[st.drums[c.dataset.drum][c.dataset.i]] || 0;
+        c.classList.toggle("on", lv > 0);
+        c.classList.toggle("v1", lv === 1); c.classList.toggle("v2", lv === 2);
+        continue;
+      }
       const on = lane === "pulse" ? st.pulse[s] : st[lane][s] === +c.dataset.deg;
       c.classList.toggle("on", on);
     }
@@ -169,7 +208,7 @@
   }
 
   const pushGrid = () => {
-    if (ready) undertoneGrid.setGrid(JSON.stringify({ lead: st.lead, bass: st.bass, pulse: st.pulse, bed: st.bed }));
+    if (ready) undertoneGrid.setGrid(JSON.stringify({ lead: st.lead, bass: st.bass, pulse: st.pulse, drums: drumStrings(), bed: st.bed }));
     history.replaceState(null, "", encode());
   };
   const pushParams = () => {
@@ -183,6 +222,10 @@
   function cellAt(e) { const t = document.elementFromPoint(e.clientX, e.clientY); return t && t.classList.contains("c") ? t : null; }
   function toggle(c, mode) {
     const s = +c.dataset.step, lane = c.dataset.lane, d = +c.dataset.deg;
+    if (lane === "drums") { // mode is the character a drag paints
+      const row = st.drums[c.dataset.drum], v = mode ?? TAP[row[c.dataset.i]];
+      row[c.dataset.i] = v; return v;
+    }
     if (lane === "pulse") {
       const v = mode ?? !st.pulse[s]; st.pulse[s] = v; return v;
     }
@@ -209,7 +252,13 @@
   for (const [box, list, key] of [["moods", MOODS, "mood"], ["voices", VOICES, "voice"]]) {
     for (const v of list) {
       const b = document.createElement("span"); b.className = "chip"; b.textContent = v; b.dataset.v = v;
-      b.onclick = () => { st[key] = v; paint(); pushParams(); };
+      b.onclick = () => {
+        st[key] = v; pushParams();
+        if (key === "mood" && ready && drumStrings().every((s) => /^\.*$/.test(s))) {
+          st.drums = lanes(JSON.parse(undertoneGrid.seedGrid(st.seed)).drums); pushGrid();
+        }
+        paint();
+      };
       $(box).appendChild(b);
     }
   }
@@ -228,13 +277,13 @@
   }
   $("bpm").oninput = (e) => { st.bpm = +e.target.value; $("bpmv").textContent = st.bpm; pushParams(); };
   $("bed").onclick = () => { st.bed = !st.bed; paint(); pushGrid(); };
-  $("clear").onclick = () => { st.lead.fill(0); st.bass.fill(0); st.pulse.fill(false); paint(); pushGrid(); };
+  $("clear").onclick = () => { st.lead.fill(0); st.bass.fill(0); st.pulse.fill(false); st.drums = lanes(); paint(); pushGrid(); };
   $("dice").onclick = () => {
     if (!ready) return;
     st.seed = (st.seed % 999) + 1;
     pushParams(); // the seed also picks the bed's patterns
     const g = JSON.parse(undertoneGrid.seedGrid(st.seed));
-    st.lead = g.lead; st.bass = g.bass; st.pulse = g.pulse;
+    st.lead = g.lead; st.bass = g.bass; st.pulse = g.pulse; st.drums = lanes(g.drums);
     paint(); pushGrid();
     status.textContent = `seed ${st.seed}`;
   };
@@ -284,9 +333,12 @@
     ready = true;
     if (!decode(location.hash)) {
       const g = JSON.parse(undertoneGrid.initial);
-      st.lead = g.lead; st.bass = g.bass; st.pulse = g.pulse;
+      st.lead = g.lead; st.bass = g.bass; st.pulse = g.pulse; st.drums = lanes(g.drums);
+      linkHasDrums = true;
     }
-    paint(); pushParams(); pushGrid();
+    pushParams(); // before seeding: seedGrid derives from the current params
+    if (!linkHasDrums) st.drums = lanes(JSON.parse(undertoneGrid.seedGrid(st.seed)).drums);
+    paint(); pushGrid();
     $("play").disabled = false;
     $("play").innerHTML = "&#9654; play";
     document.querySelector("main").classList.remove("loading");

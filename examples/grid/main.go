@@ -1,7 +1,7 @@
 //go:build js
 
 // grid is a step sequencer over the undertone engine: a 16-step pattern of
-// lead, bass and pulse lanes, played by the engine's own tracker over its
+// lead, bass, pulse and drum lanes, played by the engine's own tracker over its
 // generated bed. The page draws the grid and owns its state; this program
 // turns that state into engine calls and reports the playhead.
 //
@@ -13,7 +13,8 @@
 //
 // JS surface, on window.undertoneGrid:
 //
-//	setGrid(json)    {lead:[16], bass:[16], pulse:[16], bed}: degrees 1..8, 0 = rest
+//	setGrid(json)    {lead:[16], bass:[16], pulse:[16], drums:[3], bed}: degrees 1..8, 0 = rest;
+//	                 drums are kick, clap, shaker as 32 sixteenths of X x o .
 //	setParams(json)  {bpm, mood: "village"|"aurora"|"meadow"|"overworld"|"ruins"|"dungeon", voice, seed}
 //	seedGrid(seed)   a starting grid derived from the current params, as JSON
 //	play() / stop()  call from the tap handler: iOS resumes audio only inside one
@@ -51,10 +52,11 @@ func (g *gate) Read(p []byte) (int, error) {
 }
 
 type gridJSON struct {
-	Lead  []int  `json:"lead"`
-	Bass  []int  `json:"bass"`
-	Pulse []bool `json:"pulse"`
-	Bed   bool   `json:"bed"`
+	Lead  []int    `json:"lead"`
+	Bass  []int    `json:"bass"`
+	Pulse []bool   `json:"pulse"`
+	Drums []string `json:"drums"`
+	Bed   bool     `json:"bed"`
 }
 
 type paramsJSON struct {
@@ -69,6 +71,7 @@ func (j gridJSON) grid() engine.Grid {
 	copy(g.Lead[:], j.Lead)
 	copy(g.Bass[:], j.Bass)
 	copy(g.Pulse[:], j.Pulse)
+	copy(g.Drums[:], j.Drums)
 	return g
 }
 
@@ -130,7 +133,7 @@ func keyJSON(p engine.Params) string {
 }
 
 func toJSON(g engine.Grid) string {
-	out := gridJSON{Lead: g.Lead[:], Bass: g.Bass[:], Pulse: g.Pulse[:], Bed: g.Bed}
+	out := gridJSON{Lead: g.Lead[:], Bass: g.Bass[:], Pulse: g.Pulse[:], Drums: g.Drums[:], Bed: g.Bed}
 	b, _ := json.Marshal(out)
 	return string(b)
 }
