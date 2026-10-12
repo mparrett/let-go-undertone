@@ -145,15 +145,20 @@ func TestVillagePeaks(t *testing.T) {
 	}
 }
 
-// The drums draw from their own rng streams, so a groove never changes what
-// the melodic tracks play.
+// The drums draw from their own rng streams and voices, so a groove never
+// changes what the melodic tracks play: rendered with and without drums, the
+// melodic voices hold the same state throughout.
 func TestGrooveLeavesMelodyAlone(t *testing.T) {
 	p, _ := DeriveMood("village", 7, 3, 0.6)
 	quiet := p
 	quiet.Groove, quiet.DrumGain, quiet.DrumBusy, quiet.Swing = "", 0, 0, 0
-	for pat := 0; pat < 8; pat++ {
-		if fmt.Sprint(buildPatterns(p, pat)) != fmt.Sprint(buildPatterns(quiet, pat)) {
-			t.Fatalf("pattern %d: the groove changed the melodic tracks", pat)
+	a, b := NewSynth(p), NewSynth(quiet)
+	buf := make([]byte, 4*a.samplesPerRow/3)
+	for i := 0; i < 3*rows*4; i++ { // four patterns, in third-of-a-row chunks
+		a.Read(buf)
+		b.Read(buf)
+		if fmt.Sprint(a.voices) != fmt.Sprint(b.voices) {
+			t.Fatalf("chunk %d (pattern %d row %d): the groove changed the melodic voices", i, a.pat, a.row)
 		}
 	}
 }
@@ -190,6 +195,39 @@ func TestDrumStrikeIsFresh(t *testing.T) {
 			if u.env != 0 || u.phase != 0 {
 				t.Errorf("lane %d unit %d: re-hit kept env %.3g phase %.3g", d, i, u.env, u.phase)
 			}
+		}
+	}
+}
+
+// SetParametersNow switches the drums on the next row, as it does swing,
+// rather than leaving the old groove playing out its pattern.
+func TestSetParametersNowSwitchesDrums(t *testing.T) {
+	village, _ := DeriveMood("village", 7, 5, 0)
+	aurora, _ := DeriveMood("aurora", 7, 1, 0)
+	hits := func(s *Synth) bool {
+		for d := range s.drums {
+			for _, h := range s.drums[d] {
+				if h.on > 0 || h.off > 0 {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	for _, c := range []struct {
+		name     string
+		from, to Params
+		want     bool
+	}{{"village -> aurora", village, aurora, false}, {"aurora -> village", aurora, village, true}} {
+		s := NewSynth(c.from)
+		s.Read(make([]byte, 4*s.samplesPerRow*3))
+		s.SetParametersNow(c.to)
+		s.Read(make([]byte, 4*s.samplesPerRow))
+		if s.pat != 0 {
+			t.Fatalf("crossed into pattern %d; the test needs the switch mid-pattern", s.pat)
+		}
+		if hits(s) != c.want {
+			t.Errorf("%s mid-pattern: drums sounding = %v, want %v", c.name, !c.want, c.want)
 		}
 	}
 }

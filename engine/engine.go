@@ -389,7 +389,9 @@ var breeze = Patch{
 // Each drum is played at a fixed note on its own track, so its trim is
 // baked into its output gain rather than kept in a table like leadTrim.
 // Balanced solo (2026-10-11): the clap within 4 dB of the kick while
-// sounding, the shaker about 9 dB under, as hats sit.
+// sounding, the shaker about 9 dB under, as hats sit. TestKitBalance holds
+// looser bounds (6 dB, and 6 to 18 dB under) so retuning a patch has room;
+// re-measure and redate this when a patch changes.
 
 // kick: the pulse's swept sine, falling fast from about 300 Hz to its note
 // (play it near 62 Hz, which leaves the sub to a game's own impacts), plus a
@@ -786,6 +788,10 @@ func (s *Synth) apply(p Params) {
 func (s *Synth) step() {
 	if p := s.now.Swap(nil); p != nil {
 		s.apply(*p)
+		// The groove and drum gain follow at once, as swing does; buildDrums
+		// is deterministic for a pattern, so an unchanged groove rebuilds the
+		// same hits.
+		s.drums = buildDrums(s.params, s.pat)
 	}
 	if s.row == 0 {
 		if p := s.next.Swap(nil); p != nil {
