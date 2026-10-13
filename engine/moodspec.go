@@ -1,0 +1,162 @@
+package engine
+
+import (
+	"fmt"
+	"math"
+	"reflect"
+	"strings"
+)
+
+// Line is one parameter's response to level: Base + Step*level, clamped to
+// [Lo, Hi]. An unbounded side is ±Inf.
+type Line struct{ Base, Step, Lo, Hi float64 }
+
+// MoodSpec is a mood row as data: the form a designer edits and exports. A
+// built-in mood converts to one and back without changing what it derives.
+// Patches stay in code; Palette names a built-in bank.
+type MoodSpec struct {
+	Name               string
+	Scales             [][]int
+	BPM                Line
+	RootBase, RootStep int
+	Drone, Fifth       Line
+	Pad, Bell, Air     Line
+	Calm, BellLift     int
+	Palette            string
+	Leads              []string
+	Grooves            []string
+	Drums, Busy        Line
+	Swing              float64
+}
+
+var palettes = map[string]Palette{
+	"dungeon":   dungeonPalette,
+	"overworld": overworldPalette,
+	"aurora":    auroraPalette,
+}
+
+// PaletteNames lists the patch banks a MoodSpec can name.
+func PaletteNames() []string { return []string{"dungeon", "overworld", "aurora"} }
+
+func (l Line) internal() line { return line{l.Base, l.Step, l.Lo, l.Hi} }
+
+// export converts a table line. A mood without drums leaves its drum lines
+// as zero values, clamped to [0, 0]; they derive 0 either way, so they export
+// unbounded, leaving a designer who adds a groove free to raise them.
+func (l line) export() Line {
+	if l == (line{}) {
+		l = lin(0, 0)
+	}
+	return Line{l.base, l.step, l.lo, l.hi}
+}
+
+// MoodByName returns a built-in mood as a spec.
+func MoodByName(name string) (MoodSpec, bool) {
+	for _, m := range moods {
+		if m.name != name {
+			continue
+		}
+		s := MoodSpec{
+			Name: m.name, Scales: m.scales, BPM: m.bpm.export(),
+			RootBase: m.rootBase, RootStep: m.rootStep,
+			Drone: m.drone.export(), Fifth: m.fifth.export(), Pad: m.pad.export(),
+			Bell: m.bell.export(), Air: m.air.export(),
+			Calm: m.calm, BellLift: m.bellLift,
+			Leads: m.leads, Grooves: m.grooves,
+			Drums: m.drums.export(), Busy: m.busy.export(), Swing: m.swing,
+		}
+		for name, p := range palettes {
+			if reflect.DeepEqual(p, m.palette) {
+				s.Palette = name
+			}
+		}
+		return s, true
+	}
+	return MoodSpec{}, false
+}
+
+// Derive maps game state to music for this spec, exactly as DeriveMood does
+// for a built-in mood. It reports an error for a spec that names a palette,
+// lead or groove the engine does not have, or has no scales.
+func (s MoodSpec) Derive(seed uint64, level int, tension float64) (Params, error) {
+	pal, ok := palettes[s.Palette]
+	if !ok {
+		return Params{}, fmt.Errorf("unknown palette %q", s.Palette)
+	}
+	if len(s.Scales) == 0 || len(s.Leads) == 0 {
+		return Params{}, fmt.Errorf("a mood needs scales and leads")
+	}
+	for _, sc := range s.Scales {
+		if len(sc) != 7 {
+			return Params{}, fmt.Errorf("scale %v: the sequencer needs seven degrees", sc)
+		}
+	}
+	for _, l := range s.Leads {
+		if _, ok := leadLib[l]; !ok {
+			return Params{}, fmt.Errorf("unknown lead %q", l)
+		}
+	}
+	for _, g := range s.Grooves {
+		if _, ok := grooveLib[g]; !ok {
+			return Params{}, fmt.Errorf("unknown groove %q", g)
+		}
+	}
+	m := mood{
+		name: s.Name, scales: s.Scales, bpm: s.BPM.internal(),
+		rootBase: s.RootBase, rootStep: s.RootStep,
+		drone: s.Drone.internal(), fifth: s.Fifth.internal(), pad: s.Pad.internal(),
+		bell: s.Bell.internal(), air: s.Air.internal(),
+		calm: s.Calm, bellLift: s.BellLift, palette: pal, leads: s.Leads,
+		grooves: s.Grooves, drums: s.Drums.internal(), busy: s.Busy.internal(), swing: s.Swing,
+	}
+	return m.derive(seed, level, tension), nil
+}
+
+// EDN writes the spec as an entry for the moods map in letgo/lg/ambience.lg,
+// in that file's shape: a clamp appears only where it binds. :palette has no
+// lg counterpart yet (the host picks patches by mood name).
+func (s MoodSpec) EDN() string {
+	num := func(f float64) string {
+		t := fmt.Sprintf("%g", f)
+		if !strings.ContainsAny(t, ".e") {
+			t += ".0"
+		}
+		return t
+	}
+	ln := func(l Line) string {
+		out := "{:base " + num(l.Base) + " :step " + num(l.Step)
+		if !math.IsInf(l.Lo, -1) {
+			out += " :lo " + num(l.Lo)
+		}
+		if !math.IsInf(l.Hi, 1) {
+			out += " :hi " + num(l.Hi)
+		}
+		return out + "}"
+	}
+	kws := func(names []string) string {
+		parts := make([]string, len(names))
+		for i, n := range names {
+			parts[i] = ":" + n
+		}
+		return "[" + strings.Join(parts, " ") + "]"
+	}
+	scales := make([]string, len(s.Scales))
+	for i, sc := range s.Scales {
+		scales[i] = fmt.Sprint(sc) // [0 2 3 5 7 9 10]: an EDN vector already
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, ":%s\n{:scales    [%s]\n", s.Name, strings.Join(scales, " "))
+	fmt.Fprintf(&b, " :bpm       %s\n :root-base %d :root-step %d\n", ln(s.BPM), s.RootBase, s.RootStep)
+	for _, f := range []struct {
+		k string
+		l Line
+	}{{"drone", s.Drone}, {"fifth", s.Fifth}, {"pad", s.Pad}, {"bell", s.Bell}, {"air", s.Air}} {
+		fmt.Fprintf(&b, " :%-9s %s\n", f.k, ln(f.l))
+	}
+	fmt.Fprintf(&b, " :calm      %d\n :bell-lift %d\n :palette   :%s\n :leads     %s", s.Calm, s.BellLift, s.Palette, kws(s.Leads))
+	if len(s.Grooves) > 0 {
+		fmt.Fprintf(&b, "\n :grooves   %s\n :drums     %s\n :busy      %s\n :swing     %s",
+			kws(s.Grooves), ln(s.Drums), ln(s.Busy), num(s.Swing))
+	}
+	return b.String() + "}"
+}
