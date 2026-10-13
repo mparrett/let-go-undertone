@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"sort"
 	"strings"
 )
 
@@ -33,6 +34,16 @@ var palettes = map[string]Palette{
 	"dungeon":   dungeonPalette,
 	"overworld": overworldPalette,
 	"aurora":    auroraPalette,
+}
+
+// GrooveNames lists the grooves a MoodSpec can name, sorted.
+func GrooveNames() []string {
+	names := make([]string, 0, len(grooveLib))
+	for n := range grooveLib {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // PaletteNames lists the patch banks a MoodSpec can name.

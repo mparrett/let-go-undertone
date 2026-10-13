@@ -16,6 +16,7 @@
 //	                         derive from a spec and play it from the next row; returns
 //	                         {error} or what was derived: {bpm, key, lead, groove, gains}
 //	edn(json)                the spec as an ambience.lg moods entry
+//	palettes(), grooves()    the names a spec can use, as JSON
 //	play() / stop()          call from the tap handler: iOS resumes audio only inside one
 package main
 
@@ -150,6 +151,7 @@ func main() {
 	api := map[string]any{
 		"moods":    js.FuncOf(func(js.Value, []js.Value) any { return marshal(engine.MoodNames()) }),
 		"palettes": js.FuncOf(func(js.Value, []js.Value) any { return marshal(engine.PaletteNames()) }),
+		"grooves":  js.FuncOf(func(js.Value, []js.Value) any { return marshal(engine.GrooveNames()) }),
 		"spec": js.FuncOf(func(_ js.Value, a []js.Value) any {
 			s, ok := engine.MoodByName(a[0].String())
 			if !ok {
