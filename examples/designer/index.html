@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Undertone Designer</title>
+<style>
+  :root { --bg: #0d0d10; --panel: #15151a; --line: #26262e; --fg: #d6d1c2; --mut: #8a8576;
+          --acc: #e0b84f; --bar: #5fa8c9; --err: #c96a5f; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg);
+         font: 14px/1.45 ui-monospace, Menlo, monospace; }
+  main { max-width: 1100px; margin: 0 auto; display: grid; gap: 28px; }
+  @media (min-width: 900px) { main { grid-template-columns: 300px 1fr; align-items: start; } body { padding: 32px; } }
+  h1 { font-size: 14px; letter-spacing: .2em; color: var(--mut); margin: 0 0 10px; font-weight: 600; }
+  h2 { font-size: 12px; letter-spacing: .1em; color: var(--mut); margin: 18px 0 6px; font-weight: 600; }
+  #status { color: var(--mut); min-height: 1.45em; font-size: 13px; }
+  #status.err { color: var(--err); }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 8px 0; }
+  button, .chip, select, input[type=number], input[type=text] {
+    font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+  button, .chip { cursor: pointer; }
+  #play { min-width: 6.5em; font-size: 15px; border-color: #3d5a47; background: #18241d; }
+  #play.on { border-color: var(--acc); background: #2a2414; }
+  .chip { font-size: 13px; color: var(--mut); padding: 4px 9px; }
+  .chip.on { color: var(--fg); border-color: var(--mut); background: #22222a; }
+  label.sl { display: grid; grid-template-columns: 5.5em 1fr 4ch; gap: 8px; align-items: center; font-size: 13px; color: var(--mut); margin: 6px 0; }
+  label.sl output { color: var(--fg); text-align: right; }
+  input[type=range] { width: 100%; accent-color: var(--acc); }
+  input[type=text] { width: 100%; }
+  #readout { font-size: 13px; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
+  textarea { width: 100%; min-height: 18em; font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--fg);
+             background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px; }
+
+  /* one card per line: base and step sliders, optional clamps, and the line drawn across levels 0..10 */
+  .lines { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .card .hd { display: flex; justify-content: space-between; font-size: 13px; }
+  .card .hd b { font-weight: 600; }
+  .card .hd span { color: var(--acc); }
+  .card label.sl { grid-template-columns: 3em 1fr 6ch; }
+  .clamps { display: flex; gap: 10px; font-size: 12px; color: var(--mut); align-items: center; flex-wrap: wrap; }
+  .clamps input[type=number] { width: 6.5em; padding: 3px 6px; }
+  .sweep { display: flex; align-items: flex-end; gap: 2px; height: 34px; margin-top: 8px; }
+  .sweep i { flex: 1; background: var(--line); border-radius: 2px 2px 0 0; min-height: 1px; }
+  .sweep i.cur { background: var(--bar); }
+  .ints { display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); }
+  main.loading section, main.loading .ctl { opacity: .35; pointer-events: none; }
+</style>
+</head>
+<body>
+<main class="loading">
+ <aside>
+  <h1>UNDERTONE · DESIGNER</h1>
+  <div id="status">loading the engine…</div>
+  <div class="bar"><button id="play" disabled>loading…</button></div>
+  <div class="ctl">
+   <h2>START FROM</h2>
+   <div class="bar" id="moods"></div>
+   <h2>AUDITION</h2>
+   <label class="sl">level <input id="level" type="range" min="-2" max="10" step="1" value="0"><output id="levelv">0</output></label>
+   <label class="sl">tension <input id="tension" type="range" min="0" max="1" step="0.05" value="0"><output id="tensionv">0</output></label>
+   <label class="sl">seed <input id="seed" type="range" min="1" max="40" step="1" value="1"><output id="seedv">1</output></label>
+   <div id="readout">–</div>
+   <h2>EXPORT</h2>
+   <div class="bar"><input id="name" type="text" aria-label="mood name"></div>
+   <div class="bar"><button id="export">show EDN</button><button id="copy">copy</button></div>
+   <textarea id="edn" readonly hidden></textarea>
+  </div>
+ </aside>
+ <section>
+  <h2 style="margin-top:0">LINES <span style="color:var(--mut);font-weight:400">· base + step × level, clamped · bars show levels 0–10</span></h2>
+  <div class="lines" id="lines"></div>
+  <h2>HARMONY &amp; PATCHES</h2>
+  <div class="ints" id="ints"></div>
+ </section>
+</main>
+
+<script src="wasm_exec.js"></script>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const status = $("status");
+  const LINES = {
+    bpm:   { min: 30, max: 160, step: 1,    smin: -10, smax: 10, sstep: 0.5,  note: "tempo" },
+    drone: { min: 0,  max: 1,   step: 0.01, smin: -0.2, smax: 0.2, sstep: 0.01, note: "low drone gain" },
+    fifth: { min: 0,  max: 1,   step: 0.01, smin: -0.2, smax: 0.2, sstep: 0.01, note: "second voice gain" },
+    pad:   { min: 0,  max: 1,   step: 0.01, smin: -0.2, smax: 0.2, sstep: 0.01, note: "pad density" },
+    bell:  { min: 0,  max: 1,   step: 0.01, smin: -0.2, smax: 0.2, sstep: 0.01, note: "lead density" },
+    air:   { min: 0,  max: 1,   step: 0.01, smin: -0.2, smax: 0.2, sstep: 0.01, note: "air / breeze gain" },
+    drums: { min: 0,  max: 1,   step: 0.01, smin: -0.2, smax: 0.2, sstep: 0.01, note: "drum gain (needs grooves)" },
+    busy:  { min: 0,  max: 1,   step: 0.01, smin: -0.2, smax: 0.2, sstep: 0.01, note: "chance a ? step plays" },
+  };
+  const INTS = {
+    rootBase: { min: 36, max: 84, step: 1, note: "root note at level 0 (MIDI)" },
+    rootStep: { min: -3, max: 3, step: 1, note: "root semitones per level" },
+    calm:     { min: -12, max: 12, step: 1, note: "second voice vs chord, calm" },
+    bellLift: { min: 0, max: 24, step: 12, note: "lead lifted by octaves" },
+    swing:    { min: 0, max: 0.33, step: 0.01, note: "off-16th delay (1/6 = triplet)" },
+  };
+  let spec = null, ready = false, playing = false;
+  const lineAt = (l, x) => Math.min(l.hi ?? Infinity, Math.max(l.lo ?? -Infinity, l.base + l.step * x));
+  const fmt = (v) => Number.isInteger(v) ? String(v) : v.toFixed(2);
+
+  // ---- line cards ----
+  function slider(label, min, max, step, get, set) {
+    const w = document.createElement("label"); w.className = "sl";
+    w.innerHTML = `<span>${label}</span> <input type="range" min="${min}" max="${max}" step="${step}"><output></output>`;
+    const inp = w.querySelector("input"), out = w.querySelector("output");
+    w.sync = () => { inp.value = get(); out.textContent = fmt(+get()); };
+    inp.oninput = () => { set(+inp.value); out.textContent = fmt(+inp.value); changed(); };
+    return w;
+  }
+  const syncers = [];
+  for (const [k, c] of Object.entries(LINES)) {
+    const card = document.createElement("div"); card.className = "card";
+    card.innerHTML = `<div class="hd"><b>${k}</b><span></span></div><div style="font-size:12px;color:var(--mut)">${c.note}</div>`;
+    card.appendChild(slider("base", c.min, c.max, c.step, () => spec[k].base, (v) => spec[k].base = v));
+    card.appendChild(slider("step", c.smin, c.smax, c.sstep, () => spec[k].step, (v) => spec[k].step = v));
+    const cl = document.createElement("div"); cl.className = "clamps";
+    for (const side of ["lo", "hi"]) {
+      const lab = document.createElement("label");
+      lab.innerHTML = `<input type="checkbox"> ${side} <input type="number" step="${c.step}">`;
+      const [box, num] = lab.querySelectorAll("input");
+      box.onchange = () => { spec[k][side] = box.checked ? +(num.value || (side === "lo" ? c.min : c.max)) : null; sync(); changed(); };
+      num.oninput = () => { if (box.checked) { spec[k][side] = +num.value; changed(); } };
+      lab.sync = () => { box.checked = spec[k][side] != null; num.value = spec[k][side] ?? ""; num.disabled = !box.checked; };
+      cl.appendChild(lab); syncers.push(lab.sync);
+    }
+    card.appendChild(cl);
+    const sw = document.createElement("div"); sw.className = "sweep";
+    for (let l = 0; l <= 10; l++) sw.appendChild(document.createElement("i"));
+    card.appendChild(sw);
+    card.drawSweep = (level) => {
+      const vals = [...Array(11)].map((_, l) => lineAt(spec[k], l)), top = Math.max(c.max, ...vals) || 1;
+      [...sw.children].forEach((b, l) => { b.style.height = `${Math.max(0, vals[l]) / top * 100}%`; b.classList.toggle("cur", l === level); });
+      card.querySelector(".hd span").textContent = fmt(lineAt(spec[k], level));
+    };
+    syncers.push(...[...card.querySelectorAll("label.sl")].map((s) => s.sync));
+    $("lines").appendChild(card);
+  }
+  for (const [k, c] of Object.entries(INTS)) {
+    const card = document.createElement("div"); card.className = "card";
+    card.innerHTML = `<div class="hd"><b>${k}</b></div><div style="font-size:12px;color:var(--mut)">${c.note}</div>`;
+    const s = slider("", c.min, c.max, c.step, () => spec[k], (v) => spec[k] = v);
+    card.appendChild(s); syncers.push(s.sync);
+    $("ints").appendChild(card);
+  }
+  // palette, leads, grooves: names the engine already has
+  {
+    const card = document.createElement("div"); card.className = "card";
+    card.innerHTML = `<div class="hd"><b>patches</b></div>
+      <label class="sl" style="grid-template-columns:5em 1fr">palette <select id="palette"></select></label>
+      <label class="sl" style="grid-template-columns:5em 1fr">leads <input id="leads" type="text" title="the seed picks one; repeats weight it"></label>
+      <label class="sl" style="grid-template-columns:5em 1fr">grooves <input id="grooves" type="text" title="amble, skip, stomp; empty for no drums"></label>`;
+    $("ints").appendChild(card);
+    const list = (s) => s.split(/[\s,]+/).filter(Boolean);
+    card.querySelector("#palette").onchange = (e) => { spec.palette = e.target.value; changed(); };
+    card.querySelector("#leads").onchange = (e) => { spec.leads = list(e.target.value); changed(); };
+    card.querySelector("#grooves").onchange = (e) => { spec.grooves = list(e.target.value); changed(); };
+    syncers.push(() => {
+      $("palette").value = spec.palette; $("leads").value = spec.leads.join(" "); $("grooves").value = (spec.grooves || []).join(" ");
+    });
+  }
+
+  function sync() { for (const f of syncers) f(); $("name").value = spec.name; }
+  const audition = () => [+$("seed").value, +$("level").value, +$("tension").value];
+
+  // Every edit re-derives and plays from the next row.
+  function changed() {
+    if (!ready || !spec) return;
+    const [seed, level, tension] = audition();
+    for (const c of document.querySelectorAll(".card")) c.drawSweep && c.drawSweep(Math.max(0, level));
+    const r = JSON.parse(undertoneDesigner.apply(JSON.stringify(spec), seed, level, tension));
+    status.classList.toggle("err", !!r.error);
+    if (r.error) { status.textContent = r.error; return; }
+    status.textContent = playing ? "playing" : "ready: tap play";
+    $("readout").innerHTML = `${r.bpm} bpm · ${r.key} · scale [${r.scale.join(" ")}]<br>lead ${r.lead}` +
+      (r.groove ? ` · groove ${r.groove}` : "") + "<br>" +
+      Object.entries(r.gains).map(([k, v]) => `${k} ${v.toFixed(2)}`).join(" · ");
+    if (!$("edn").hidden) $("edn").value = undertoneDesigner.edn(JSON.stringify(spec));
+  }
+
+  function load(name) {
+    spec = JSON.parse(undertoneDesigner.spec(name));
+    spec.grooves = spec.grooves || [];
+    for (const b of document.querySelectorAll("#moods .chip")) b.classList.toggle("on", b.dataset.v === name);
+    sync(); changed();
+  }
+
+  for (const id of ["level", "tension", "seed"]) {
+    $(id).oninput = () => { $(id + "v").textContent = $(id).value; changed(); };
+  }
+  $("name").oninput = (e) => { spec.name = e.target.value.trim().replace(/[^\w-]/g, "") || "untitled"; changed(); };
+  $("export").onclick = () => { $("edn").hidden = false; $("edn").value = undertoneDesigner.edn(JSON.stringify(spec)); };
+  $("copy").onclick = async () => {
+    const t = undertoneDesigner.edn(JSON.stringify(spec));
+    try { await navigator.clipboard.writeText(t); status.textContent = "EDN copied"; }
+    catch { $("edn").hidden = false; $("edn").value = t; status.textContent = "select the EDN below to copy it"; }
+  };
+  $("play").onclick = () => {
+    playing = !playing;
+    playing ? undertoneDesigner.play() : undertoneDesigner.stop();
+    $("play").classList.toggle("on", playing);
+    $("play").innerHTML = playing ? "&#10074;&#10074; stop" : "&#9654; play";
+    status.textContent = playing ? "playing" : "stopped";
+  };
+
+  window.undertoneDesignerFailed = (msg) => { status.textContent = "audio failed: " + msg; };
+  window.undertoneDesignerReady = () => {
+    ready = true;
+    for (const m of JSON.parse(undertoneDesigner.moods())) {
+      const b = document.createElement("span"); b.className = "chip"; b.textContent = m; b.dataset.v = m;
+      b.onclick = () => load(m); $("moods").appendChild(b);
+    }
+    for (const p of JSON.parse(undertoneDesigner.palettes())) {
+      const o = document.createElement("option"); o.value = o.textContent = p; $("palette").appendChild(o);
+    }
+    load("village");
+    $("play").disabled = false; $("play").innerHTML = "&#9654; play";
+    document.querySelector("main").classList.remove("loading");
+  };
+  const go = new Go();
+  WebAssembly.instantiateStreaming(fetch("main.wasm", { cache: "no-cache" }), go.importObject)
+    .then((r) => go.run(r.instance))
+    .catch((e) => { status.textContent = "wasm failed: " + e; });
+</script>
+</body>
+</html>
