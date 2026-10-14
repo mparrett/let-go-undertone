@@ -147,6 +147,34 @@ port similar code to lg. First, lg's `*` raises on overflow, so seed mixing
 needs `unchecked-multiply`. Second, lg has no unsigned integer, so an unsigned
 remainder needs doing by hand (`ambience/umod`).
 
+### A full lg CLI with audio
+
+A program that already runs on the stock `lg` CLI, with its flags (`-source-paths`,
+`-storage-id`, …), can keep them all by building that CLI with the binding linked
+in. The whole `main.go` is:
+
+```go
+package main
+
+import (
+	"os"
+
+	"github.com/nooga/let-go/pkg/cli"
+
+	"github.com/mparrett/let-go-undertone/letgo"
+)
+
+func main() {
+	_ = letgo.CurrentMusic() // the import registers the audio namespace
+	os.Exit(cli.Main("dev", "undertone"))
+}
+```
+
+Run the program with this binary in place of `lg`. Put `letgo/lg` on
+`-source-paths` if it uses `ambience`. To keep one codebase that also runs on a
+stock `lg`, where there is no `audio` namespace, look the natives up at runtime:
+`(resolve 'audio/trigger)` is nil there.
+
 ## Native playback: keep the player reachable
 
 Natively, playback goes through [oto](https://github.com/ebitengine/oto). oto attaches a cleanup to every `*oto.Player` that closes it once the handle
