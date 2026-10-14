@@ -189,3 +189,25 @@ func TestEveryShotIsAudible(t *testing.T) {
 		}
 	}
 }
+
+// A music gain of 0 must leave the one-shots at full level: the bed goes,
+// the shot stays. A full bed at gain 0 renders the same bytes as a synth
+// whose music is silent by its parameters.
+func TestMusicGainZeroKeepsShots(t *testing.T) {
+	ref := NewSynth(silentParams)
+	ref.Trigger("hit", 60, 1, 0.5, 0, 11)
+	want := render(ref, SampleRate/4)
+
+	s := NewSynth(DeriveDungeon(7, 3, 0.5)) // a full bed, drone and drums and all
+	s.SetMusicGain(0)
+	s.Trigger("hit", 60, 1, 0.5, 0, 11)
+	got := render(s, SampleRate/4)
+	if len(got) != len(want) {
+		t.Fatalf("length %d, want %d", len(got), len(want))
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("sample %d: %d, want %d", i, got[i], want[i])
+		}
+	}
+}

@@ -38,6 +38,11 @@ type Music struct {
 	// starting guards the window between opening the device and the unlock
 	// gesture arriving, so a second Start cannot open a second context.
 	starting bool
+
+	// musicGain is the last audio/set-music-gain, carried into a synth that
+	// starts later; gainSet keeps the zero value from meaning silence.
+	musicGain float64
+	gainSet   bool
 }
 
 // NewMusic starts from base parameters; the lg script is expected to
@@ -196,10 +201,24 @@ func (m *Music) Start() vm.Value {
 	}
 	m.out = out
 	m.synth = syn
+	if m.gainSet {
+		m.synth.SetMusicGain(m.musicGain)
+	}
 	// Parameters may have moved while we waited for the gesture; the synth was
 	// built from a snapshot, so catch it up to whatever is current.
 	m.synth.SetParameters(m.params)
 	return vm.NIL
+}
+
+// setMusicGain sets the music bed's level (0..1) under the one-shots, now if
+// playing and from the start otherwise.
+func (m *Music) setMusicGain(g float64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.musicGain, m.gainSet = g, true
+	if m.synth != nil {
+		m.synth.SetMusicGain(g)
+	}
 }
 
 // Started reports whether playback is live. Go-side only, deliberately not a
@@ -357,6 +376,19 @@ func installAudioNS() {
 	}))
 	ns.Def("music-stop", native("music-stop", 0, func([]vm.Value) (vm.Value, error) {
 		return current.Load().Stop(), nil
+	}))
+	ns.Def("set-music-gain", native("set-music-gain", 1, func(a []vm.Value) (vm.Value, error) {
+		var g float64
+		switch v := a[0].(type) {
+		case vm.Float:
+			g = float64(v)
+		case vm.Int:
+			g = float64(v)
+		default:
+			return vm.NIL, fmt.Errorf("audio/set-music-gain: gain must be a number, got %s", a[0].Type().Name())
+		}
+		current.Load().setMusicGain(g)
+		return vm.NIL, nil
 	}))
 	ns.Def("trigger", native("trigger", 1, func(a []vm.Value) (vm.Value, error) {
 		return current.Load().trigger(a[0]), nil
