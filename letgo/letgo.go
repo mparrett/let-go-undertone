@@ -14,6 +14,7 @@ package letgo
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strconv"
 	"sync"
@@ -175,6 +176,10 @@ func (m *Music) trigger(v vm.Value) vm.Value {
 // demo drivers call it directly — in the browser it must run inside a user
 // gesture (autoplay policy), not from lg.
 func (m *Music) Start() vm.Value {
+	return m.start(openOutput)
+}
+
+func (m *Music) start(open func(io.Reader) (output, error)) vm.Value {
 	m.mu.Lock()
 	if m.out != nil || m.starting {
 		m.mu.Unlock()
@@ -182,6 +187,10 @@ func (m *Music) Start() vm.Value {
 	}
 	m.starting = true
 	syn := engine.NewSynth(m.params)
+	// Output initialization may render audio before it returns.
+	if m.gainSet {
+		syn.SetMusicGain(m.musicGain)
+	}
 	m.mu.Unlock()
 
 	// Deliberately NOT holding the mutex here. In a browser the output is not
@@ -190,7 +199,7 @@ func (m *Music) Start() vm.Value {
 	// including Started(), which callers poll precisely to find out whether
 	// this finished. (Cost a real debugging session: it presented as the wasm
 	// runtime killing the module for deadlock, not as a lock-ordering bug.)
-	out, err := openOutput(syn)
+	out, err := open(syn)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
