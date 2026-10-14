@@ -204,6 +204,68 @@ var twang = Patch{
 	{opOut, [4]float64{0.3, 0.5}},
 }
 
+// ---- arcade shots ----
+// Game-agnostic one-shots for action games rather than a dungeon: a bounce, a
+// break, a launch and a loss. All four are meant to be pitched by the caller
+// (usually by scale degree), so a run of them plays a phrase in the music's
+// key instead of the same note over and over. First consumer: tesserae.
+
+// blip: a bounce. A square tick with the top shaved off, short enough to fire
+// several times a second without smearing into a tone.
+var blip = Patch{
+	{opEnv, [4]float64{0.001, 0.05, 0, 0.03}},
+	{opOsc, [4]float64{0, shpPulse, 0, 1}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{3200, 0, 0, 0}},
+	{opOut, [4]float64{0.28, 0.5}},
+	{opEnv, [4]float64{0.001, 0.04, 0, 0.02}},
+	{opOsc, [4]float64{-12, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.3, 0.5}},
+}
+
+// tink: something breaking that you meant to break. Two inharmonic sines
+// like the bell lead but with a fraction of its decay, plus a noise flick for
+// the crack, and a send so a cascade of them blooms in the delay.
+var tink = Patch{
+	{opEnv, [4]float64{0.001, 0.32, 0, 0.18}},
+	{opOsc, [4]float64{0, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opSend, [4]float64{0.3, 0, 0, 0}},
+	{opOut, [4]float64{0.4, 0.5}},
+	{opEnv, [4]float64{0.001, 0.12, 0, 0.08}},
+	{opOsc, [4]float64{19.08, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.16, 0.5}},
+	{opEnv, [4]float64{0.001, 0.02, 0, 0.01}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opHpf, [4]float64{2500, 0, 0, 0}},
+	{opOut, [4]float64{0.25, 0.5}},
+}
+
+// zap: a launch. A pulse rising two octaves into the note, fast, so it reads
+// as "away" rather than as a pitch.
+var zap = Patch{
+	{opEnv, [4]float64{0.002, 0.14, 0, 0.06}},
+	{opOsc, [4]float64{0, shpPulse, -24, 0.05}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{2800, 0, 0, 0}},
+	{opSend, [4]float64{0.2, 0, 0, 0}},
+	{opOut, [4]float64{0.32, 0.5}},
+}
+
+// fall: a loss. A saw sliding two octaves down through a closing lowpass,
+// slow enough to hear the whole drop; the inverse of zap.
+var fall = Patch{
+	{opEnv, [4]float64{0.005, 0.7, 0, 0.3}},
+	{opOsc, [4]float64{0, shpSaw, 24, 0.3}},
+	{opMul, [4]float64{}},
+	{opLpf, [4]float64{1400, 0, 0, 0}},
+	{opSend, [4]float64{0.35, 0, 0, 0}},
+	{opOut, [4]float64{0.5, 0.5}},
+}
+
 // shotDef pairs a patch with its gate length. One-shots are not on the
 // sequencer grid, so nothing counts gate rows for them; the gate is in
 // milliseconds and expires in frame().
@@ -226,6 +288,11 @@ var shotLib = map[string]shotDef{
 	// pickup reuses the Karplus-Strong lead: pitched by the caller from the
 	// floor's own scale, which is what keeps found-a-rune in key with the score.
 	"pluck": {pluck, 60},
+	// arcade
+	"blip": {blip, 10},
+	"tink": {tink, 20},
+	"zap":  {zap, 20},
+	"fall": {fall, 120},
 }
 
 // shotReq is a staged trigger. delay is in samples, counted down in frame(),
