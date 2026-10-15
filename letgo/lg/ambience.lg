@@ -13,7 +13,10 @@
 ;; The kaiju-elements trick, unchanged from the Go original: taste lives in
 ;; hand-tuned option tables, the seed only picks from them.
 
-(ns ambience)
+(ns ambience
+  ;; `derive` is the public name for the derivation; core's (hierarchies) is
+  ;; unused here, and shadowing it prints a warning on every load.
+  (:refer-clojure :exclude [derive]))
 
 ;; ---- seeded rng ----
 ;; xorshift64 over int64. lg's Int is 64-bit, and bitwise ops do not
