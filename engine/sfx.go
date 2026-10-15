@@ -255,7 +255,7 @@ var zap = Patch{
 	{opOut, [4]float64{0.32, 0.5}},
 }
 
-// fall: a loss. A saw sliding two octaves down through a closing lowpass,
+// fall: a loss. A saw sliding two octaves down through a lowpass,
 // slow enough to hear the whole drop; the inverse of zap.
 var fall = Patch{
 	{opEnv, [4]float64{0.005, 0.7, 0, 0.3}},
