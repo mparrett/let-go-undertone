@@ -714,6 +714,11 @@ type Synth struct {
 	nframe int64                  // frames rendered, synthesis-side
 	frames atomic.Int64           // nframe as of the end of the last Read
 	rowLog rowLog
+
+	// music bus level as float bits, set from the caller's goroutine. A mixer
+	// control rather than a Param: it never changes what the score derives,
+	// only how loud the bed sits under the one-shots.
+	musicGain atomic.Uint64
 }
 
 // band-edge one-pole coefficients (120/350/1200 Hz) and ~400ms decay
@@ -759,8 +764,19 @@ func (s *Synth) Levels() [4]float64 {
 
 func NewSynth(p Params) *Synth {
 	s := &Synth{voices: make([]Voice, nTracks)}
+	s.musicGain.Store(math.Float64bits(1))
 	s.apply(p)
 	return s
+}
+
+// SetMusicGain scales the music bed (sequencer voices, drums and their delay
+// sends) by g, clamped to 0..1, leaving one-shots at full level. Safe to call
+// from any goroutine; 1 renders byte-identically to no call at all.
+func (s *Synth) SetMusicGain(g float64) {
+	if !(g >= 0) { // also catches NaN
+		g = 0
+	}
+	s.musicGain.Store(math.Float64bits(math.Min(g, 1)))
 }
 
 // SetParameters stages a new parameter map; it takes effect at the next
@@ -838,6 +854,9 @@ func (s *Synth) frame() (int16, int16) {
 		}
 	}
 	s.runDrums(&l, &r)
+	if g := math.Float64frombits(s.musicGain.Load()); g != 1 {
+		l, r, s.dbus = l*g, r*g, s.dbus*g
+	}
 	s.runShots(&l, &r)
 	// cross-fed stereo delay
 	wl, wr := s.dl[s.dpos], s.dr[s.dpos]
