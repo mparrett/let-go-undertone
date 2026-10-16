@@ -157,7 +157,7 @@
     { name: "uneasy", level: 2, tension: 0.5 },
     { name: "dread", level: 4, tension: 1 },
   ];
-  let spec = null, ready = false, playing = false, stashedGrooves = null;
+  let spec = null, ready = false, playing = false, stashedGrooves = null, grooveCopies = {};
   const lineAt = (l, x) => Math.min(l.hi ?? Infinity, Math.max(l.lo ?? -Infinity, l.base + l.step * x));
   const fmt = (v) => Number.isInteger(v) ? String(v) : v.toFixed(2);
   const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
@@ -255,7 +255,11 @@
     for (const g of JSON.parse(undertoneDesigner.grooves())) {
       const b = el("span", "chip", g);
       b.onclick = () => {
-        spec.grooves = spec.grooves.includes(g) ? spec.grooves.filter((x) => x !== g) : [...spec.grooves, g];
+        // A groove listed twice is twice as likely, so off remembers how many
+        // copies there were and on puts them all back.
+        const n = spec.grooves.filter((x) => x === g).length;
+        if (n) { grooveCopies[g] = n; spec.grooves = spec.grooves.filter((x) => x !== g); }
+        else spec.grooves = [...spec.grooves, ...Array(grooveCopies[g] || 1).fill(g)];
         if (!spec.grooves.length) stashedGrooves = null;
         sync(); changed();
       };
@@ -334,7 +338,7 @@
     if (!ready || !spec) return;
     const [seed, level, tension] = audition();
     showAudition();
-    for (const f of sweeps) f(Math.max(0, level));
+    for (const f of sweeps) f(level);
     const r = JSON.parse(undertoneDesigner.apply(JSON.stringify(spec), seed, level, tension));
     status.classList.toggle("err", !!r.error);
     if (r.error) { status.textContent = r.error; return; }
@@ -347,7 +351,7 @@
   function load(name) {
     spec = JSON.parse(undertoneDesigner.spec(name));
     spec.grooves = spec.grooves || [];
-    stashedGrooves = null;
+    stashedGrooves = null; grooveCopies = {};
     for (const b of document.querySelectorAll("#moods .chip")) b.classList.toggle("on", b.dataset.v === name);
     sync(); changed();
   }
