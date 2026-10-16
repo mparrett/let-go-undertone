@@ -65,8 +65,9 @@ type Player struct {
 	cap        int
 
 	// Made once, not per slice: under TinyGo every js.Value that holds a JS
-	// object carries a finalizer, and ~86 new ones a second force a full
-	// collection of the guest VM's heap often enough to stall the page
+	// object carries a finalizer. Three per slice (~86 slices a second) plus
+	// one per queued() check came to several hundred a second, which forced
+	// a full collection of the guest VM's heap often enough to stall the page
 	// (TinyGo 0.42, 2026-10-15).
 	atomics js.Value
 	views   []js.Value // data.subarray for each slice-sized slot of the ring
