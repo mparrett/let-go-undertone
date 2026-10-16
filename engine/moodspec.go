@@ -60,6 +60,12 @@ func LeadNames() []string {
 // PaletteNames lists the patch banks a MoodSpec can name.
 func PaletteNames() []string { return []string{"dungeon", "overworld", "aurora"} }
 
+// PaletteByName returns a patch bank by the name a MoodSpec uses for it.
+func PaletteByName(name string) (Palette, bool) {
+	p, ok := palettes[name]
+	return p, ok
+}
+
 func (l Line) internal() line { return line{l.Base, l.Step, l.Lo, l.Hi} }
 
 // export converts a table line. A mood without drums leaves its drum lines
@@ -146,8 +152,9 @@ func (s MoodSpec) Derive(seed uint64, level int, tension float64) (Params, error
 }
 
 // EDN writes the spec as an entry for the moods map in letgo/lg/ambience.lg,
-// in that file's shape: a clamp appears only where it binds. :palette has no
-// lg counterpart yet (the host picks patches by mood name).
+// in that file's shape: a clamp appears only where it binds. The table's own
+// entries omit :palette, since the host picks their patches by mood name; an
+// entry passed to ambience/derive-spec needs it.
 func (s MoodSpec) EDN() string {
 	num := func(f float64) string {
 		t := fmt.Sprintf("%g", f)

@@ -82,6 +82,15 @@ func (m *Music) setParameters(v vm.Value) vm.Value {
 			m.params.LeadName, m.params.LeadGate = p.LeadName, p.LeadGate
 		}
 	}
+	// :palette names a bank directly, for a mood the host has no row for. The
+	// bank's own bell is replaced by the current lead, since a partial map
+	// need not carry :lead.
+	if s, ok := kwStr(lgm, "palette"); ok {
+		if pal, ok := engine.PaletteByName(s); ok {
+			m.params.Palette = pal
+			engine.ApplyLead(&m.params, m.params.LeadName)
+		}
+	}
 	flt(lgm, "bpm", &m.params.BPM)
 	integer(lgm, "root", &m.params.Root)
 	flt(lgm, "drone-gain", &m.params.DroneGain)
