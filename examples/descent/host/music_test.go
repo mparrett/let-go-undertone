@@ -8,8 +8,8 @@ import (
 	"github.com/nooga/let-go/pkg/api"
 	"github.com/nooga/let-go/pkg/vm"
 
-	"github.com/mparrett/let-go-undertone/engine"
-	"github.com/mparrett/let-go-undertone/letgo"
+	"github.com/mparrett/undertone/engine"
+	"github.com/mparrett/undertone/letgo"
 )
 
 // These tests are about the tension MODEL, not the plumbing. The model exists

@@ -1,4 +1,4 @@
-module github.com/mparrett/let-go-undertone
+module github.com/mparrett/undertone
 
 go 1.27
 

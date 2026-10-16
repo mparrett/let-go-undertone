@@ -31,8 +31,8 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/mparrett/let-go-undertone/engine"
-	"github.com/mparrett/let-go-undertone/webaudio"
+	"github.com/mparrett/undertone/engine"
+	"github.com/mparrett/undertone/webaudio"
 )
 
 // gate keeps the synth from advancing while stopped: the output may start

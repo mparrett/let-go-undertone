@@ -5,8 +5,8 @@ package letgo
 import (
 	"io"
 
-	"github.com/mparrett/let-go-undertone/engine"
-	"github.com/mparrett/let-go-undertone/webaudio"
+	"github.com/mparrett/undertone/engine"
+	"github.com/mparrett/undertone/webaudio"
 )
 
 // In the browser the engine plays through webaudio's pump rather than oto,

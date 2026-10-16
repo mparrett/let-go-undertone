@@ -24,8 +24,8 @@ import (
 	"github.com/nooga/let-go/pkg/rt"
 	"github.com/nooga/let-go/pkg/vm"
 
-	"github.com/mparrett/let-go-undertone/engine"
-	"github.com/mparrett/let-go-undertone/letgo/lg"
+	"github.com/mparrett/undertone/engine"
+	"github.com/mparrett/undertone/letgo/lg"
 )
 
 // Music holds the host side of the audio surface. The mutex guards the

@@ -28,7 +28,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mparrett/let-go-undertone/engine"
+	"github.com/mparrett/undertone/engine"
 )
 
 func main() {

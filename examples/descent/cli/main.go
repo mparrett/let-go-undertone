@@ -9,7 +9,7 @@
 // it: deriving music parameters and sfx triggers from game state, which
 // happens at human rates and is where a game's taste lives.
 //
-// The natives and Music state come from let-go-undertone's letgo package; the
+// The natives and Music state come from undertone's letgo package; the
 // demo driver lives in ../host so the browser front end (../web) runs the
 // identical turn. This file is only the native CLI: flags and stdout.
 //
@@ -40,10 +40,10 @@ import (
 	"github.com/nooga/let-go/pkg/api"
 	"github.com/nooga/let-go/pkg/vm"
 
-	"github.com/mparrett/let-go-undertone/engine"
-	"github.com/mparrett/let-go-undertone/letgo"
+	"github.com/mparrett/undertone/engine"
+	"github.com/mparrett/undertone/letgo"
 
-	"github.com/mparrett/let-go-undertone/examples/descent/host"
+	"github.com/mparrett/undertone/examples/descent/host"
 )
 
 func main() {
@@ -65,7 +65,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	// ambience ships inside let-go-undertone, not in this directory, so the
+	// ambience ships inside undertone, not in this directory, so the
 	// demo's namespaces load from the embedded copies; the load path is only
 	// for namespaces a caller adds.
 	if err := host.LoadEmbedded(c); err != nil {

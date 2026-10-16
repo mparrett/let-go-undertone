@@ -1,7 +1,7 @@
 # Examples
 
 Three ways in, all live at
-[matt.parrett.us/let-go-undertone](https://matt.parrett.us/let-go-undertone/),
+[matt.parrett.us/undertone](https://matt.parrett.us/undertone/),
 which `.github/workflows/pages.yml` rebuilds on every push to `main`.
 Browser pages need HTTPS or `localhost`, since Safari only offers
 AudioWorklet in a secure context; tap to start audio.

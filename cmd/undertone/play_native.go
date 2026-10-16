@@ -8,7 +8,7 @@ import (
 
 	"github.com/ebitengine/oto/v3"
 
-	"github.com/mparrett/let-go-undertone/engine"
+	"github.com/mparrett/undertone/engine"
 )
 
 // startPlayback streams s through oto at oto's default buffer sizes: a CLI bed has no
