@@ -28,6 +28,34 @@ func TestMoodSpecRoundTrip(t *testing.T) {
 	}
 }
 
+// A spec owns its slices: editing one in place leaves the built-in mood, and
+// what the spec already derived, alone.
+func TestMoodSpecDoesNotAliasTheTable(t *testing.T) {
+	want, _ := DeriveMood("village", 1, 3, 0)
+	s, _ := MoodByName("village")
+	got, _ := s.Derive(1, 3, 0)
+	for _, sc := range s.Scales {
+		for i := range sc {
+			sc[i] = 99
+		}
+	}
+	for i := range s.Leads {
+		s.Leads[i] = "zzz"
+	}
+	for i := range s.Grooves {
+		s.Grooves[i] = "zzz"
+	}
+	if fresh, _ := MoodByName("village"); fresh.Leads[0] == "zzz" || fresh.Grooves[0] == "zzz" || fresh.Scales[0][0] == 99 {
+		t.Error("editing a spec changed the mood table")
+	}
+	if after, _ := DeriveMood("village", 1, 3, 0); !reflect.DeepEqual(after, want) {
+		t.Error("editing a spec changed the built-in mood")
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Error("editing a spec changed what it had already derived")
+	}
+}
+
 func TestMoodSpecRejectsWhatTheEngineLacks(t *testing.T) {
 	base, _ := MoodByName("village")
 	for _, c := range []struct {

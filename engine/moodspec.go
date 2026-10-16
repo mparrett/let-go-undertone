@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"reflect"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -71,19 +72,30 @@ func (l line) export() Line {
 	return Line{l.base, l.step, l.lo, l.hi}
 }
 
-// MoodByName returns a built-in mood as a spec.
+// cloneScales copies a scale list, so a spec and the mood table never share
+// one: an edit to either would otherwise change what the other derives.
+func cloneScales(sc [][]int) [][]int {
+	out := make([][]int, len(sc))
+	for i, s := range sc {
+		out[i] = slices.Clone(s)
+	}
+	return out
+}
+
+// MoodByName returns a built-in mood as a spec. The spec owns its slices, so
+// editing it leaves the built-in mood alone.
 func MoodByName(name string) (MoodSpec, bool) {
 	for _, m := range moods {
 		if m.name != name {
 			continue
 		}
 		s := MoodSpec{
-			Name: m.name, Scales: m.scales, BPM: m.bpm.export(),
+			Name: m.name, Scales: cloneScales(m.scales), BPM: m.bpm.export(),
 			RootBase: m.rootBase, RootStep: m.rootStep,
 			Drone: m.drone.export(), Fifth: m.fifth.export(), Pad: m.pad.export(),
 			Bell: m.bell.export(), Air: m.air.export(),
 			Calm: m.calm, BellLift: m.bellLift,
-			Leads: m.leads, Grooves: m.grooves,
+			Leads: slices.Clone(m.leads), Grooves: slices.Clone(m.grooves),
 			Drums: m.drums.export(), Busy: m.busy.export(), Swing: m.swing,
 		}
 		for name, p := range palettes {
@@ -123,12 +135,12 @@ func (s MoodSpec) Derive(seed uint64, level int, tension float64) (Params, error
 		}
 	}
 	m := mood{
-		name: s.Name, scales: s.Scales, bpm: s.BPM.internal(),
+		name: s.Name, scales: cloneScales(s.Scales), bpm: s.BPM.internal(),
 		rootBase: s.RootBase, rootStep: s.RootStep,
 		drone: s.Drone.internal(), fifth: s.Fifth.internal(), pad: s.Pad.internal(),
 		bell: s.Bell.internal(), air: s.Air.internal(),
-		calm: s.Calm, bellLift: s.BellLift, palette: pal, leads: s.Leads,
-		grooves: s.Grooves, drums: s.Drums.internal(), busy: s.Busy.internal(), swing: s.Swing,
+		calm: s.Calm, bellLift: s.BellLift, palette: pal, leads: slices.Clone(s.Leads),
+		grooves: slices.Clone(s.Grooves), drums: s.Drums.internal(), busy: s.Busy.internal(), swing: s.Swing,
 	}
 	return m.derive(seed, level, tension), nil
 }
