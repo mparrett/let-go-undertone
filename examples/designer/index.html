@@ -55,11 +55,12 @@
   .card .hd b { font-weight: 600; }
   .card .hd span { color: var(--sec); }
   .card .note { font-size: 12px; color: var(--mut); }
-  /* collapsing: a section folds to its header, a card to its title row */
+  /* collapsing: a card folds to its title row; a section's title opens or
+     shuts all its cards, and its arrow shows which a tap will do */
   .sec > header h2, .card .hd { cursor: pointer; user-select: none; }
   .sec > header h2::before, .card .hd b::before { content: "▾ "; color: var(--mut); }
-  .sec.shut > header h2::before, .card.shut .hd b::before { content: "▸ "; }
-  .sec.shut > .cards, .card.shut > :not(.hd) { display: none; }
+  .sec.someshut > header h2::before, .card.shut .hd b::before { content: "▸ "; }
+  .card.shut > :not(.hd) { display: none; }
   details.help { font-size: 12px; color: var(--mut); margin: 2px 0 6px; }
   details.help summary { cursor: pointer; color: var(--sec, var(--mut)); }
   details.help p { margin: 6px 0; line-height: 1.45; }
@@ -244,12 +245,22 @@
   const narrow = matchMedia("(max-width: 700px)").matches;
   let folds = {};
   try { folds = JSON.parse(localStorage.getItem("designer-folds") || "{}"); } catch {}
-  function foldable(box, handle, key, shut) {
-    box.classList.toggle("shut", folds[key] ?? shut);
-    handle.onclick = () => {
-      folds[key] = box.classList.toggle("shut");
-      try { localStorage.setItem("designer-folds", JSON.stringify(folds)); } catch {}
+  const saveFolds = () => { try { localStorage.setItem("designer-folds", JSON.stringify(folds)); } catch {} };
+  function foldSection(sec, id) {
+    const cards = [...sec.querySelectorAll(".card")];
+    const key = (card) => "card:" + id + ":" + card.querySelector(".hd b").textContent;
+    const mark = () => sec.classList.toggle("someshut", cards.some((c) => c.classList.contains("shut")));
+    const set = (card, shut) => { folds[key(card)] = card.classList.toggle("shut", shut); };
+    for (const card of cards) {
+      card.classList.toggle("shut", folds[key(card)] ?? narrow);
+      card.querySelector(".hd").onclick = () => { set(card, !card.classList.contains("shut")); mark(); saveFolds(); };
+    }
+    sec.querySelector("header h2").onclick = () => {
+      const open = sec.classList.contains("someshut");
+      for (const card of cards) set(card, !open);
+      mark(); saveFolds();
     };
+    mark();
   }
 
   function buildSections() {
@@ -277,10 +288,7 @@
     }
     sec.append(head, cards);
     $("sections").append(sec);
-    foldable(sec, head.querySelector("h2"), "sec:" + s.id, false);
-    for (const card of cards.children) {
-      foldable(card, card.querySelector(".hd"), "card:" + s.id + ":" + card.querySelector(".hd b").textContent, narrow);
-    }
+    foldSection(sec, s.id);
    }
   }
 
