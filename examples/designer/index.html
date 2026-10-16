@@ -61,7 +61,10 @@
           border-left: 3px solid var(--sec); border-radius: 8px; padding: 10px 12px; }
   .card .hd { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
   .card .hd b { font-weight: 600; }
-  .card .hd span { color: var(--sec); }
+  .card .hd span { color: var(--sec); margin-left: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .card .hd b { flex: none; }
+  /* a grid item is as wide as its content by default; a long summary must truncate instead */
+  .card { min-width: 0; }
   .card .note { font-size: 12px; color: var(--mut); }
   /* collapsing: a card folds to its title row; a section's title opens or
      shuts all its cards, and its arrow shows which a tap will do */
@@ -196,7 +199,16 @@
   function intCard(c) {
     const card = el("div", "card", `<div class="hd"><b>${c.int}</b></div><div class="note">${c.note}</div>`);
     card.append(slider("", c.min, c.max, c.step, () => spec[c.int], (v) => spec[c.int] = v));
+    summary(card, () => fmt(spec[c.int]));
     return card;
+  }
+
+  // summary puts a card's gist in its title row, so a shut card still says
+  // what it is set to. It refreshes on every change, as the line values do.
+  const NOTES = ["C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"];
+  function summary(card, text) {
+    const span = el("span"); card.querySelector(".hd").append(span);
+    sweeps.push(() => { span.textContent = text(); });
   }
 
   function groupCard(g) {
@@ -206,6 +218,10 @@
       s.title = c.tip; s.style.gridTemplateColumns = "3.5em 1fr 4ch";
       card.append(s);
     }
+    summary(card, () => {
+      const r = spec.rootBase, key = NOTES[((r % 12) + 12) % 12] + (Math.floor(r / 12) - 1);
+      return spec.rootStep ? `${key} · ${spec.rootStep > 0 ? "+" : "−"}${Math.abs(spec.rootStep)}/level` : key;
+    });
     return card;
   }
 
@@ -224,6 +240,7 @@
     sel.onchange = () => { spec.palette = sel.value; changed(); };
     leads.oninput = () => { spec.leads = leads.value.split(/[\s,]+/).filter(Boolean); changed(); };
     syncers.push(() => { sel.value = spec.palette; leads.value = spec.leads.join(" "); });
+    summary(card, () => `${spec.palette} · ${[...new Set(spec.leads)].join(" ")}`);
     help(card, `<p><b>palette</b> is a bank of instrument sounds, one for each layer: drone, fifth, pad, air and pulse.
       Changing it changes how every layer sounds, not what they play.</p>
       <p><b>leads</b> is the instrument that plays the melody (the lead layer). Only one plays at a time; the seed,
@@ -246,6 +263,7 @@
       bar.append(b);
     }
     card.append(bar);
+    summary(card, () => [...new Set(spec.grooves)].join(" ") || "off");
     return card;
   }
 
