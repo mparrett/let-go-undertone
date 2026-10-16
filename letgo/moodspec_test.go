@@ -3,7 +3,7 @@ package letgo
 import (
 	"testing"
 
-	"github.com/mparrett/let-go-undertone/engine"
+	"github.com/mparrett/undertone/engine"
 )
 
 // A designer's export pastes into ambience.lg: each built-in mood's EDN,
