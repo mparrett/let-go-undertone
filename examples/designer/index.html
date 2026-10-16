@@ -80,6 +80,7 @@
    <div id="now">–</div>
    <details class="aud">
     <summary><b>AUDITION</b><span id="audsum"></span></summary>
+    <div class="lab">PRESETS</div>
     <div class="bar" id="presets"></div>
     <label class="sl">level <input id="level" type="range" min="-2" max="10" step="1" value="0"><output id="levelv">0</output></label>
     <label class="sl">tension <input id="tension" type="range" min="0" max="1" step="0.05" value="0"><output id="tensionv">0</output></label>
@@ -190,7 +191,7 @@
   function patchesCard() {
     const card = el("div", "card", `<div class="hd"><b>patches</b></div><div class="note">sounds the mood plays with</div>
       <label class="sl" style="grid-template-columns:5em 1fr">palette <select></select></label>
-      <label class="sl" style="grid-template-columns:5em 1fr">leads <input type="text" title="the seed picks one; repeat a name to weight it"></label>`);
+      <label class="sl" style="grid-template-columns:5em 1fr">leads <input type="text" title="one of these plays, chosen by the seed; list a name twice to make it likelier"></label>`);
     const sel = card.querySelector("select"), leads = card.querySelector("input");
     for (const p of JSON.parse(undertoneDesigner.palettes())) sel.append(Object.assign(el("option"), { value: p, textContent: p }));
     sel.onchange = () => { spec.palette = sel.value; changed(); };
@@ -200,7 +201,7 @@
   }
 
   function groovesCard() {
-    const card = el("div", "card", `<div class="hd"><b>grooves</b></div><div class="note">the seed picks one of those chosen</div>`);
+    const card = el("div", "card", `<div class="hd"><b>grooves</b></div><div class="note">one of the chosen grooves plays; the seed (in audition) decides which</div>`);
     const bar = el("div", "bar");
     for (const g of JSON.parse(undertoneDesigner.grooves())) {
       const b = el("span", "chip", g);
