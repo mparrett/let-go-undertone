@@ -41,6 +41,53 @@ func fingerprint(p engine.Params) string {
 	return fmt.Sprintf("%x", sha256.Sum256(buf))[:16]
 }
 
+// checkParams holds a derivation's parameters to another's, bit for bit, and
+// renders both, since the palette is reached only through the audio.
+func checkParams(t *testing.T, name string, got, want engine.Params) {
+	t.Helper()
+	if got.BPM != want.BPM || got.Root != want.Root {
+		t.Errorf("%s: bpm/root = %v/%d, want %v/%d", name, got.BPM, got.Root, want.BPM, want.Root)
+	}
+	if fmt.Sprint(got.Scale) != fmt.Sprint(want.Scale) {
+		t.Errorf("%s: scale = %v, want %v", name, got.Scale, want.Scale)
+	}
+	if got.LeadName != want.LeadName || got.LeadGate != want.LeadGate {
+		t.Errorf("%s: lead = %s/%d, want %s/%d", name, got.LeadName, got.LeadGate, want.LeadName, want.LeadGate)
+	}
+	if got.FifthOffset != want.FifthOffset || got.BellLift != want.BellLift {
+		t.Errorf("%s: offset/lift = %d/%d, want %d/%d", name, got.FifthOffset, got.BellLift, want.FifthOffset, want.BellLift)
+	}
+	if got.Groove != want.Groove {
+		t.Errorf("%s: groove = %q, want %q", name, got.Groove, want.Groove)
+	}
+	if got.Seed != want.Seed {
+		t.Errorf("%s: seed = %d, want %d", name, got.Seed, want.Seed)
+	}
+	// The gains are float arithmetic in two languages; they
+	// must land bit-identical, or the audio will not.
+	for _, f := range []struct {
+		what      string
+		got, want float64
+	}{
+		{"drone-gain", got.DroneGain, want.DroneGain},
+		{"fifth-gain", got.FifthGain, want.FifthGain},
+		{"pad-density", got.PadDensity, want.PadDensity},
+		{"bell-density", got.BellDensity, want.BellDensity},
+		{"air-gain", got.AirGain, want.AirGain},
+		{"pulse-gain", got.PulseGain, want.PulseGain},
+		{"drum-gain", got.DrumGain, want.DrumGain},
+		{"drum-busy", got.DrumBusy, want.DrumBusy},
+		{"swing", got.Swing, want.Swing},
+	} {
+		if f.got != f.want {
+			t.Errorf("%s: %s = %v, want %v", name, f.what, f.got, f.want)
+		}
+	}
+	if g, w := fingerprint(got), fingerprint(want); g != w {
+		t.Errorf("%s: rendered audio %s, want %s", name, g, w)
+	}
+}
+
 func TestLgDerivationMatchesGo(t *testing.T) {
 	c, m := lgRuntime(t)
 
@@ -64,47 +111,7 @@ func TestLgDerivationMatchesGo(t *testing.T) {
 					}
 					got := m.params
 
-					if got.BPM != want.BPM || got.Root != want.Root {
-						t.Errorf("%s: bpm/root = %v/%d, want %v/%d", name, got.BPM, got.Root, want.BPM, want.Root)
-					}
-					if fmt.Sprint(got.Scale) != fmt.Sprint(want.Scale) {
-						t.Errorf("%s: scale = %v, want %v", name, got.Scale, want.Scale)
-					}
-					if got.LeadName != want.LeadName || got.LeadGate != want.LeadGate {
-						t.Errorf("%s: lead = %s/%d, want %s/%d", name, got.LeadName, got.LeadGate, want.LeadName, want.LeadGate)
-					}
-					if got.FifthOffset != want.FifthOffset || got.BellLift != want.BellLift {
-						t.Errorf("%s: offset/lift = %d/%d, want %d/%d", name, got.FifthOffset, got.BellLift, want.FifthOffset, want.BellLift)
-					}
-					if got.Groove != want.Groove {
-						t.Errorf("%s: groove = %q, want %q", name, got.Groove, want.Groove)
-					}
-					if got.Seed != want.Seed {
-						t.Errorf("%s: seed = %d, want %d", name, got.Seed, want.Seed)
-					}
-					// The gains are float arithmetic in two languages; they
-					// must land bit-identical, or the audio will not.
-					for _, f := range []struct {
-						what      string
-						got, want float64
-					}{
-						{"drone-gain", got.DroneGain, want.DroneGain},
-						{"fifth-gain", got.FifthGain, want.FifthGain},
-						{"pad-density", got.PadDensity, want.PadDensity},
-						{"bell-density", got.BellDensity, want.BellDensity},
-						{"air-gain", got.AirGain, want.AirGain},
-						{"pulse-gain", got.PulseGain, want.PulseGain},
-						{"drum-gain", got.DrumGain, want.DrumGain},
-						{"drum-busy", got.DrumBusy, want.DrumBusy},
-						{"swing", got.Swing, want.Swing},
-					} {
-						if f.got != f.want {
-							t.Errorf("%s: %s = %v, want %v", name, f.what, f.got, f.want)
-						}
-					}
-					if g, w := fingerprint(got), fingerprint(want); g != w {
-						t.Errorf("%s: rendered audio %s, want %s", name, g, w)
-					}
+					checkParams(t, name, got, want)
 				}
 			}
 		}
