@@ -55,6 +55,11 @@
   .card .hd b { font-weight: 600; }
   .card .hd span { color: var(--sec); }
   .card .note { font-size: 12px; color: var(--mut); }
+  /* collapsing: a section folds to its header, a card to its title row */
+  .sec > header h2, .card .hd { cursor: pointer; user-select: none; }
+  .sec > header h2::before, .card .hd b::before { content: "▾ "; color: var(--mut); }
+  .sec.shut > header h2::before, .card.shut .hd b::before { content: "▸ "; }
+  .sec.shut > .cards, .card.shut > :not(.hd) { display: none; }
   details.help { font-size: 12px; color: var(--mut); margin: 2px 0 6px; }
   details.help summary { cursor: pointer; color: var(--sec, var(--mut)); }
   details.help p { margin: 6px 0; line-height: 1.45; }
@@ -64,6 +69,7 @@
   .sweep { display: flex; align-items: flex-end; gap: 2px; height: 30px; margin-top: 8px; }
   .sweep i { flex: 1; background: var(--line); border-radius: 2px 2px 0 0; min-height: 1px; }
   .sweep i.cur { background: var(--sec); }
+  .sweepcap { display: flex; justify-content: space-between; font-size: 10px; color: var(--mut); margin-top: 2px; }
   .off .cards { opacity: .35; pointer-events: none; }
   /* the drums switch */
   .switch { margin-left: auto; font-size: 12px; color: var(--mut); display: flex; gap: 6px; align-items: center; cursor: pointer; }
@@ -116,7 +122,7 @@
       ]},
       { patches: true },
     ]},
-    { id: "layer", title: "LAYERS", note: "floor to sky · base + step × level, clamped · bars: levels 0–10", items: [
+    { id: "layer", title: "LAYERS", note: "floor to sky · each value is base + step × level, kept within min and max", items: [
       { line: "drone", ...GAIN, note: "the floor: low drone gain" },
       { line: "fifth", ...GAIN, note: "the second voice's gain" },
       { line: "pad",   ...GAIN, note: "pad chords: how often they play" },
@@ -157,7 +163,7 @@
                 slider("step", c.smin, c.smax, c.sstep, () => spec[k].step, (v) => spec[k].step = v));
     const cl = el("div", "clamps");
     for (const side of ["lo", "hi"]) {
-      const lab = el("label", "", `<input type="checkbox"> ${side} <input type="number" step="${c.step}">`);
+      const lab = el("label", "", `<input type="checkbox"> ${side === "lo" ? "min" : "max"} <input type="number" step="${c.step}">`);
       const [box, num] = lab.querySelectorAll("input");
       box.onchange = () => { spec[k][side] = box.checked ? +(num.value || (side === "lo" ? c.min : c.max)) : null; sync(); changed(); };
       num.oninput = () => { if (box.checked) { spec[k][side] = +num.value; changed(); } };
@@ -165,8 +171,9 @@
       cl.append(lab);
     }
     const sw = el("div", "sweep");
+    sw.title = "the value at each level, 0 to 10; the lit bar is the audition level";
     for (let l = 0; l <= 10; l++) sw.append(el("i"));
-    card.append(cl, sw);
+    card.append(cl, sw, el("div", "sweepcap", "<span>level 0</span><span>value by level · lit = now</span><span>10</span>"));
     sweeps.push((level) => {
       const vals = [...Array(11)].map((_, l) => lineAt(spec[k], l)), top = Math.max(c.max, ...vals) || 1;
       [...sw.children].forEach((b, l) => { b.style.height = `${Math.max(0, vals[l]) / top * 100}%`; b.classList.toggle("cur", l === level); });
@@ -232,6 +239,19 @@
   }
 
   // Built once the engine is ready: the patch and groove cards list its names.
+  // Open and shut state is a per-viewer convenience, so it lives in
+  // localStorage, which can be missing or throw; the defaults stand in.
+  const narrow = matchMedia("(max-width: 700px)").matches;
+  let folds = {};
+  try { folds = JSON.parse(localStorage.getItem("designer-folds") || "{}"); } catch {}
+  function foldable(box, handle, key, shut) {
+    box.classList.toggle("shut", folds[key] ?? shut);
+    handle.onclick = () => {
+      folds[key] = box.classList.toggle("shut");
+      try { localStorage.setItem("designer-folds", JSON.stringify(folds)); } catch {}
+    };
+  }
+
   function buildSections() {
    for (const s of SECTIONS) {
     const sec = el("div", "sec " + s.id), head = el("header", "", `<h2>${s.title}</h2><small>${s.note}</small>`);
@@ -257,6 +277,10 @@
     }
     sec.append(head, cards);
     $("sections").append(sec);
+    foldable(sec, head.querySelector("h2"), "sec:" + s.id, false);
+    for (const card of cards.children) {
+      foldable(card, card.querySelector(".hd"), "card:" + s.id + ":" + card.querySelector(".hd b").textContent, narrow);
+    }
    }
   }
 
