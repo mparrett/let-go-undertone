@@ -133,7 +133,7 @@
     { id: "drum", title: "DRUMS", note: "kick, clap, shaker", toggle: true, items: [
       { grooves: true },
       { line: "drums", ...GAIN, note: "drum gain" },
-      { line: "busy",  ...GAIN, note: "how often a ? step plays" },
+      { line: "busy",  ...GAIN, note: "how full the shaker is: the chance each optional hit plays" },
       { int: "swing", min: 0, max: 0.33, step: 0.01, note: "off-16th push (0.17 ≈ triplet)" },
     ]},
   ];
