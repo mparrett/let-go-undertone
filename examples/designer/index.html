@@ -55,6 +55,9 @@
   .card .hd b { font-weight: 600; }
   .card .hd span { color: var(--sec); }
   .card .note { font-size: 12px; color: var(--mut); }
+  details.help { font-size: 12px; color: var(--mut); margin: 2px 0 6px; }
+  details.help summary { cursor: pointer; color: var(--sec, var(--mut)); }
+  details.help p { margin: 6px 0; line-height: 1.45; }
   .card label.sl { grid-template-columns: 3em 1fr 6ch; }
   .clamps { display: flex; gap: 10px; font-size: 12px; color: var(--mut); align-items: center; flex-wrap: wrap; }
   .clamps input[type=number] { width: 6.5em; padding: 3px 6px; }
@@ -188,6 +191,12 @@
     return card;
   }
 
+  // help adds a collapsed explanation under a card's note, for controls whose
+  // meaning the control itself does not show.
+  function help(card, html) {
+    card.querySelector(".note").after(el("details", "help", `<summary>what is this?</summary>${html}`));
+  }
+
   function patchesCard() {
     const card = el("div", "card", `<div class="hd"><b>patches</b></div><div class="note">sounds the mood plays with</div>
       <label class="sl" style="grid-template-columns:5em 1fr">palette <select></select></label>
@@ -197,6 +206,11 @@
     sel.onchange = () => { spec.palette = sel.value; changed(); };
     leads.oninput = () => { spec.leads = leads.value.split(/[\s,]+/).filter(Boolean); changed(); };
     syncers.push(() => { sel.value = spec.palette; leads.value = spec.leads.join(" "); });
+    help(card, `<p><b>palette</b> is a bank of instrument sounds, one for each layer: drone, fifth, pad, air and pulse.
+      Changing it changes how every layer sounds, not what they play.</p>
+      <p><b>leads</b> is the instrument that plays the melody (the lead layer). Only one plays at a time; the seed,
+      in audition, picks which. A name listed twice is twice as likely.
+      The leads are ${JSON.parse(undertoneDesigner.leads()).join(", ")}.</p>`);
     return card;
   }
 

@@ -46,6 +46,16 @@ func GrooveNames() []string {
 	return names
 }
 
+// LeadNames lists the leads a MoodSpec can name, sorted.
+func LeadNames() []string {
+	names := make([]string, 0, len(leadLib))
+	for n := range leadLib {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
 // PaletteNames lists the patch banks a MoodSpec can name.
 func PaletteNames() []string { return []string{"dungeon", "overworld", "aurora"} }
 

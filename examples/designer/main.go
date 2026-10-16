@@ -152,6 +152,7 @@ func main() {
 		"moods":    js.FuncOf(func(js.Value, []js.Value) any { return marshal(engine.MoodNames()) }),
 		"palettes": js.FuncOf(func(js.Value, []js.Value) any { return marshal(engine.PaletteNames()) }),
 		"grooves":  js.FuncOf(func(js.Value, []js.Value) any { return marshal(engine.GrooveNames()) }),
+		"leads":    js.FuncOf(func(js.Value, []js.Value) any { return marshal(engine.LeadNames()) }),
 		"spec": js.FuncOf(func(_ js.Value, a []js.Value) any {
 			s, ok := engine.MoodByName(a[0].String())
 			if !ok {
