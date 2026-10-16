@@ -370,13 +370,14 @@
     try { await navigator.clipboard.writeText(t); status.textContent = "EDN copied"; }
     catch { $("edn").hidden = false; $("edn").value = t; status.textContent = "select the EDN below to copy it"; }
   };
-  $("play").onclick = () => {
-    playing = !playing;
+  function setPlaying(on) {
+    playing = on;
     playing ? undertoneDesigner.play() : undertoneDesigner.stop();
     $("play").classList.toggle("on", playing);
     $("play").innerHTML = playing ? "&#10074;&#10074; stop" : "&#9654; play";
     status.textContent = playing ? "playing" : "stopped";
-  };
+  }
+  $("play").onclick = () => setPlaying(!playing);
 
   // Export sits in the sidebar on a wide screen; on a phone it follows the
   // sections, since it is the last thing done.
@@ -389,7 +390,7 @@
     ready = true;
     buildSections();
     for (const m of JSON.parse(undertoneDesigner.moods())) {
-      const b = el("span", "chip", m); b.dataset.v = m; b.onclick = () => load(m); $("moods").append(b);
+      const b = el("span", "chip", m); b.dataset.v = m; b.onclick = () => { load(m); if (!playing) setPlaying(true); }; $("moods").append(b);
     }
     load("village");
     $("play").disabled = false; $("play").innerHTML = "&#9654; play";
