@@ -8,7 +8,7 @@ import (
 
 	"github.com/ebitengine/oto/v3"
 
-	"github.com/mparrett/let-go-undertone/engine"
+	"github.com/mparrett/undertone/engine"
 )
 
 // oto allows one context per process, so it is opened once and shared: a

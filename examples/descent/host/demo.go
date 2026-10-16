@@ -8,7 +8,7 @@ import (
 	"github.com/nooga/let-go/pkg/api"
 	"github.com/nooga/let-go/pkg/vm"
 
-	"github.com/mparrett/let-go-undertone/letgo"
+	"github.com/mparrett/undertone/letgo"
 )
 
 // The demo drivers (CLI and browser) differ only in where a turn's trace line

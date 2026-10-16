@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"syscall/js"
 
-	"github.com/mparrett/let-go-undertone/engine"
-	"github.com/mparrett/let-go-undertone/webaudio"
+	"github.com/mparrett/undertone/engine"
+	"github.com/mparrett/undertone/webaudio"
 )
 
 // startPlayback opens the browser output and returns at once: webaudio.Open waits for

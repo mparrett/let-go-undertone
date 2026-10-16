@@ -5,7 +5,7 @@ import (
 
 	"github.com/nooga/let-go/pkg/api"
 
-	"github.com/mparrett/let-go-undertone/engine"
+	"github.com/mparrett/undertone/engine"
 )
 
 // Importing the package is the whole install for an lg runtime that links it

@@ -1,4 +1,4 @@
-# let-go-undertone
+# undertone
 
 A small generative-ambience engine for games, with a binding for
 [let-go](https://github.com/nooga/let-go). It is a demo-sized homage to
@@ -7,12 +7,12 @@ here, only its shape. Instruments are stacks of unit opcodes run by a tiny
 per-sample VM, a tracker-style sequencer drives them, and the whole track is
 derived from a seed.
 
-**Try it in a browser: [matt.parrett.us/let-go-undertone](https://matt.parrett.us/let-go-undertone/)**
-(the [grid](https://matt.parrett.us/let-go-undertone/grid/), the
-[player](https://matt.parrett.us/let-go-undertone/player/), and a
-[let-go-driven descent](https://matt.parrett.us/let-go-undertone/descent/)).
+**Try it in a browser: [matt.parrett.us/undertone](https://matt.parrett.us/undertone/)**
+(the [grid](https://matt.parrett.us/undertone/grid/), the
+[player](https://matt.parrett.us/undertone/player/), and a
+[let-go-driven descent](https://matt.parrett.us/undertone/descent/)).
 
-[![The grid example: a step sequencer playing over the engine's bed, with lg mutations and a mood change](docs/grid.gif)](https://matt.parrett.us/let-go-undertone/grid-lg/)
+[![The grid example: a step sequencer playing over the engine's bed, with lg mutations and a mood change](docs/grid.gif)](https://matt.parrett.us/undertone/grid-lg/)
 
 The module has these parts:
 
@@ -78,7 +78,7 @@ the same architecture.
 ## The CLI
 
 ```
-go install github.com/mparrett/let-go-undertone/cmd/undertone@latest
+go install github.com/mparrett/undertone/cmd/undertone@latest
 
 undertone -play                            # live, endless
 undertone -play -depth 5 -tension 0.8      # deeper and more dangerous
@@ -89,7 +89,7 @@ undertone -wav out.wav -depth 4 -lead pluck -dur 30
 
 ## The let-go binding
 
-Importing `github.com/mparrett/let-go-undertone/letgo` registers the `audio`
+Importing `github.com/mparrett/undertone/letgo` registers the `audio`
 namespace from the package's `init`, so lg code can call it with no generated
 interop:
 
@@ -117,7 +117,7 @@ so it needs `:go/version` and no `:go/interop`:
 ```clojure
 {:lg-runtime :built
  :lg-version "1.13.0"
- :deps {github.com/mparrett/let-go-undertone/letgo {:go/version "main"}}}
+ :deps {github.com/mparrett/undertone/letgo {:go/version "main"}}}
 ```
 
 `:go/version` takes anything Go accepts: a tag, a commit, a branch. Then, from
@@ -161,7 +161,7 @@ import (
 
 	"github.com/nooga/let-go/pkg/cli"
 
-	"github.com/mparrett/let-go-undertone/letgo"
+	"github.com/mparrett/undertone/letgo"
 )
 
 func main() {
