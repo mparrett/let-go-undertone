@@ -136,7 +136,8 @@
 ;; space and how it moves with level. Each line is base + step*level, clamped
 ;; by :lo/:hi where present. Tension works the same in every mood, so it is not
 ;; in the table: tempo up, a low pulse fading in, the harmony souring, the calm
-;; layers thinning. tension 0 reproduces the pre-tension output exactly: it
+;; layers thinning, and in a mood with drums the shaker filling in and the hits
+;; landing harder. tension 0 reproduces the pre-tension output exactly: it
 ;; takes no extra rng draws. Mirrors engine/mood.go; the parity test holds the
 ;; two to the same bits.
 
@@ -247,8 +248,8 @@
      :lead         (pick-lead seed (:leads m))
      ;; drums: moods without grooves send :none and a zero gain
      :groove       (if (:grooves m) (pick-groove seed (:grooves m)) :none)
-     :drum-gain    (if (:drums m) (line-at (:drums m) l) 0.0)
-     :drum-busy    (if (:busy m) (line-at (:busy m) l) 0.0)
+     :drum-gain    (if (:drums m) (+ (line-at (:drums m) l) (* 0.15 t)) 0.0)
+     :drum-busy    (if (:busy m) (min 1.0 (+ (line-at (:busy m) l) (* 0.4 t))) 0.0)
      :swing        (get m :swing 0.0)
      :palette      (get m :palette)}))
 

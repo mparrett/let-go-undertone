@@ -194,6 +194,13 @@ func (m *mood) derive(seed uint64, level int, tension float64) Params {
 	}
 	pickLead(&p, m.leads)
 	if len(m.grooves) > 0 {
+		// In a mood with drums, tension drives them too: the shaker fills in
+		// and the hits land harder, so a fight builds a beat on top of the
+		// level's. A mood without drums gets none from tension.
+		// float64() keeps each product rounded on its own: without it arm64
+		// fuses the multiply-add, and lg, which cannot, derives other bits.
+		p.DrumGain += float64(0.15 * t)
+		p.DrumBusy = min(1, p.DrumBusy+float64(0.4*t))
 		pickGroove(&p, m.grooves)
 	}
 	return p

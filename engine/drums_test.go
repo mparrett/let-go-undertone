@@ -286,3 +286,40 @@ func TestSetParametersNowSwitchesDrums(t *testing.T) {
 		}
 	}
 }
+
+// Tension drives the drums of a mood that has them, on top of the level's
+// build: the shaker fills in and the hits land harder, and the busy chance
+// stops at certainty. A mood without drums gets none from tension.
+func TestTensionDrivesTheDrums(t *testing.T) {
+	for _, level := range []int{0, 2, 6} {
+		calm, _ := DeriveMood("village", 1, level, 0)
+		hot, _ := DeriveMood("village", 1, level, 1)
+		if hot.DrumGain <= calm.DrumGain || hot.DrumBusy <= calm.DrumBusy || hot.DrumBusy > 1 {
+			t.Errorf("village level %d: tension 1 gives gain %v busy %v, against %v %v at rest",
+				level, hot.DrumGain, hot.DrumBusy, calm.DrumGain, calm.DrumBusy)
+		}
+		hits := func(p Params) (n int) {
+			for pat := 0; pat < 8; pat++ {
+				for _, lane := range buildDrums(p, pat) {
+					for _, h := range lane {
+						if h.on > 0 {
+							n++
+						}
+						if h.off > 0 {
+							n++
+						}
+					}
+				}
+			}
+			return n
+		}
+		if hits(hot) <= hits(calm) {
+			t.Errorf("village level %d: tension did not add hits (%d against %d)", level, hits(hot), hits(calm))
+		}
+	}
+	for _, name := range []string{"dungeon", "overworld", "meadow", "aurora"} {
+		if p, _ := DeriveMood(name, 1, 3, 1); p.DrumGain != 0 || p.DrumBusy != 0 {
+			t.Errorf("%s at tension 1 has drum gain %v busy %v", name, p.DrumGain, p.DrumBusy)
+		}
+	}
+}
