@@ -71,9 +71,10 @@ the tempo, and has no damping. The reverb is a single long, dark room
 choose its room yet.
 
 **The sequencer is a fixed grid.** A pattern is 16 rows at two rows per beat,
-so two bars. Drums play 16th notes within it, with swing and probability steps;
-the melodic tracks fire on rows only. There are no ratchets, polymeters or
-off-grid hits, and every pattern is the same length.
+so two bars. Drums play 16th notes within it, with swing, probability steps and
+ratchets (`r`, and `R` when tension allows: three hits within the 16th); the
+melodic tracks fire on rows only. There are no polymeters or flams, and every
+pattern is the same length.
 
 **Patches are code.** Built-in patches are Go tables. A game can add one-shots
 through `ShotSpec` (validated, fuzzed), but a mood's palette can only use
@@ -131,8 +132,12 @@ test can extend.
 4. **`crush`: hold and bit depth** (done). Mid-tread, so silence stays silent.
 5. **A reverb bus** beside the delay (done): a damped Freeverb-style network,
    with a Dattorro plate as the next step if it falls short.
-6. **Groove ratchets and off-grid hits**, as groove syntax, so syncopation stays
-   data.
+6. **Groove ratchets** (done), as groove syntax, so syncopation stays data.
+   Flams, which need a hit just before the grid, are not in yet. Rust plays
+   them in its `machine` groove on the industrial kit (`slam`, `clank`,
+   `tick`, built from the grit ops), which a palette can now carry in place of
+   the village kit. Its drums come only with tension: `tenseDrums` brings in
+   drums the level leaves silent, from a quarter tension up.
 
 The cost to watch is per-sample math. A fixed `svf` computes its coefficient
 once per note, as `lpf` does; a swept one recomputes it every 16 samples. On

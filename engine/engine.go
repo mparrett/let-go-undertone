@@ -671,6 +671,57 @@ var grind = Patch{
 	{opOut, [4]float64{0.8, 0.5}},
 }
 
+// ---- the industrial kit (rust's drums) ----
+// The kick, backbeat and top rebuilt from the grit ops, so tension, which
+// brings them in, also roughens them.
+
+// slam: the kick's falling sine overdriven into a square-ish punch
+var slam = Patch{
+	{opEnv, [4]float64{0.001, 0.26, 0, 0.1}},
+	{opOsc, [4]float64{0, shpSine, 30, 0.03}},
+	{opMul, [4]float64{}},
+	{opDrive, [4]float64{3, 0.15}},
+	{opOut, [4]float64{0.75, 0.5}},
+	{opEnv, [4]float64{0.0005, 0.006, 0, 0.004}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opHpf, [4]float64{2500, 0, 0, 0}},
+	{opOut, [4]float64{0.5, 0.5}},
+}
+
+// clank: a snare of crushed noise through a ringing bandpass, over a
+// ring-modulated body that sounds struck rather than skinned
+var clank = Patch{
+	{opEnv, [4]float64{0.001, 0.14, 0, 0.08}},
+	{opOsc, [4]float64{0, shpNoise, 0, 1}},
+	{opMul, [4]float64{}},
+	{opSvf, [4]float64{1900, 0.55, 1, 0}},
+	{opCrush, [4]float64{9000, 7}},
+	{opVerb, [4]float64{0.3}},
+	{opOut, [4]float64{1.2, 0.45}},
+	{opEnv, [4]float64{0.001, 0.07, 0, 0.04}},
+	{opOsc, [4]float64{0, shpSine, 0, 1}},
+	{opOsc, [4]float64{13.7, shpSine, 0, 1}},
+	{opMul, [4]float64{}},
+	{opMul, [4]float64{}},
+	{opOut, [4]float64{0.45, 0.55}},
+}
+
+// tick: a metallic hat, two pulse waves ring-modulated at an inharmonic
+// ratio and highpassed, very short
+var tick = Patch{
+	{opEnv, [4]float64{0.001, 0.035, 0, 0.02}},
+	{opOsc, [4]float64{0, shpPulse, 0, 1}},
+	{opOsc, [4]float64{11.6, shpPulse, 0, 1}},
+	{opMul, [4]float64{}},
+	{opMul, [4]float64{}},
+	{opHpf, [4]float64{6000, 0, 0, 0}},
+	{opHpf, [4]float64{6000, 0, 0, 0}},
+	{opOut, [4]float64{0.9, 0.6}},
+}
+
+var industrialKit = kit{{slam, 33}, {clank, 50}, {tick, 84}}
+
 // ---- parameters: the (seed, depth) -> music map ----
 // The kaiju-elements trick: taste lives in hand-tuned option tables,
 // the seed just picks. Depth darkens the pick.
@@ -772,12 +823,13 @@ func ApplyLead(p *Params, name string) {
 // Palette is a mood's patch bank: mood = patches + a point in parameter space.
 type Palette struct {
 	Drone, Fifth, Pad, Bell, Air, Pulse Patch
+	Kit                                 kit // zero: drumKit
 }
 
 var dungeonPalette = Palette{Drone: drone, Fifth: pad, Pad: pad, Bell: bell, Air: air, Pulse: pulse}
 var overworldPalette = Palette{Drone: bed, Fifth: pad, Pad: pad, Bell: bell, Air: breeze, Pulse: pulse}
 var auroraPalette = Palette{Drone: bed, Fifth: veil, Pad: veil, Bell: bell, Air: breeze, Pulse: pulse}
-var rustPalette = Palette{Drone: rust, Fifth: smear, Pad: smear, Bell: bell, Air: hiss, Pulse: grind}
+var rustPalette = Palette{Drone: rust, Fifth: smear, Pad: smear, Bell: bell, Air: hiss, Pulse: grind, Kit: industrialKit}
 
 var scalesByDarkness = [][]int{
 	{0, 2, 3, 5, 7, 9, 10}, // dorian
@@ -934,6 +986,8 @@ type Synth struct {
 	offLeft [nDrums]int // frames until each lane's off 16th; 0 = none armed
 	offGain [nDrums]float64
 	offSeed [nDrums]uint64
+	offN    [nDrums]int // how many times the armed off 16th ratchets
+	rat     [nDrums]ratchet
 
 	// VU meter tap: read-only from the synthesis path's view — nothing
 	// here feeds back into the samples, so renders stay byte-identical.
