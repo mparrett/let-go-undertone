@@ -11,7 +11,8 @@ func play(p Patch, note, n int) []float64 {
 	v.trigger(p, note, 1<<20, 1, 1)
 	out := make([]float64, n)
 	for i := range out {
-		var l, r, d float64
+		var l, r float64
+		var d sends
 		v.run(&l, &r, &d)
 		out[i] = l
 	}
@@ -106,7 +107,8 @@ func TestLegatoKeepsTheHeldValue(t *testing.T) {
 	var v Voice
 	v.trigger(p, 60, 1<<20, 1, 1)
 	sample := func() float64 {
-		var l, r, d float64
+		var l, r float64
+		var d sends
 		v.run(&l, &r, &d)
 		return l
 	}

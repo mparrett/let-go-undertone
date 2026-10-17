@@ -35,6 +35,7 @@ const (
 	opLfo          // p: rate Hz, shape (0 sine, 1 triangle, 2 sample-and-hold) -> push -1..1
 	opDrive        // p: drive, bias -1..1; pop x -> push tanh(drive*x + bias) - tanh(bias)
 	opCrush        // p: hold Hz, bits; pop x -> push x held and quantized
+	opVerb         // p: amount; peek top, add top*amount to the reverb bus
 )
 
 const (
@@ -159,7 +160,7 @@ func samePatch(a, b Patch) bool {
 }
 
 // run executes the patch for one sample, accumulating into l/r.
-func (v *Voice) run(l, r, delay *float64) {
+func (v *Voice) run(l, r *float64, b *sends) {
 	if v.grit != v.gritTo {
 		v.glideGrit()
 	}
@@ -366,7 +367,9 @@ func (v *Voice) run(l, r, delay *float64) {
 			stack[sp] = x
 			sp++
 		case opSend:
-			*delay += stack[sp-1] * u.p[0] * v.gain
+			b.delay += stack[sp-1] * u.p[0] * v.gain
+		case opVerb:
+			b.verb += stack[sp-1] * u.p[0] * v.gain
 		case opOut:
 			sp--
 			*l += stack[sp] * u.p[0] * (1 - u.p[1]) * v.gain
@@ -604,6 +607,7 @@ var air = Patch{
 // Resonant filters that move within a note, so the bed breathes and grinds
 // instead of sitting still, and drive and crush for grit to work on: as
 // tension rises the saws overdrive, the hiss degrades and the pulse snarls.
+// Everything sends to the reverb: a large, dark room around the whole bed.
 
 // rust: detuned saws through a resonant lowpass, each side swept by its own
 // slow lfo at a different rate, so the pair drifts in and out of phase
@@ -615,6 +619,7 @@ var rust = Patch{
 	{opSvf, [4]float64{260, 0.75, 0, 1.2}},
 	{opDrive, [4]float64{1.5, 0.1}},
 	{opSend, [4]float64{0.15, 0, 0, 0}},
+	{opVerb, [4]float64{0.35}},
 	{opOut, [4]float64{0.45, 0.35}},
 	{opEnv, [4]float64{3, 2, 1, 4}},
 	{opOsc, [4]float64{0.08, shpSaw, 0, 1}},
@@ -623,6 +628,7 @@ var rust = Patch{
 	{opSvf, [4]float64{260, 0.75, 0, 1.2}},
 	{opDrive, [4]float64{1.5, 0.1}},
 	{opSend, [4]float64{0.15, 0, 0, 0}},
+	{opVerb, [4]float64{0.35}},
 	{opOut, [4]float64{0.45, 0.65}},
 }
 
@@ -634,6 +640,7 @@ var smear = Patch{
 	{opLfo, [4]float64{0.2, 1}},
 	{opSvf, [4]float64{700, 0.6, 1, 1}},
 	{opSend, [4]float64{0.35, 0, 0, 0}},
+	{opVerb, [4]float64{0.5}},
 	{opOut, [4]float64{0.5, 0.5}},
 }
 
@@ -647,6 +654,7 @@ var hiss = Patch{
 	{opSvf, [4]float64{1500, 0.7, 1, 1.3}},
 	{opCrush, [4]float64{11025, 10}},
 	{opSend, [4]float64{0.4, 0, 0, 0}},
+	{opVerb, [4]float64{0.4}},
 	{opOut, [4]float64{0.55, 0.5}},
 }
 
@@ -659,6 +667,7 @@ var grind = Patch{
 	{opEnv, [4]float64{0.001, 0.09, 0, 0.05}},
 	{opSvf, [4]float64{90, 0.8, 0, 4}},
 	{opDrive, [4]float64{2, 0.2}},
+	{opVerb, [4]float64{0.2}},
 	{opOut, [4]float64{0.8, 0.5}},
 }
 
@@ -915,7 +924,8 @@ type Synth struct {
 	pats          [nTracks][rows]trackRow
 	dl, dr        []float64 // delay lines
 	dpos          int
-	dbus          float64
+	bus           sends   // this frame's delay and reverb sends
+	verb          *reverb
 	fx            sfx // one-shot lane (sfx.go); the sequencer never sees it
 
 	// drum lanes (drums.go), silent in moods without a groove
@@ -986,7 +996,7 @@ func (s *Synth) Levels() [4]float64 {
 }
 
 func NewSynth(p Params) *Synth {
-	s := &Synth{voices: make([]Voice, nTracks)}
+	s := &Synth{voices: make([]Voice, nTracks), verb: newReverb()}
 	s.musicGain.Store(math.Float64bits(1))
 	s.apply(p)
 	return s
@@ -1114,35 +1124,39 @@ func (s *Synth) frame() (int16, int16) {
 	s.rowLeft--
 	s.nframe++
 	var l, r float64
-	s.dbus = 0
-	var ml, mr, mbus float64 // where a muted layer plays
+	s.bus = sends{}
+	var ml, mr float64 // where a muted layer plays
+	var mbus sends
 	for i := range s.voices {
 		if s.voices[i].active {
 			if s.params.Mute&(1<<i) != 0 {
 				s.voices[i].run(&ml, &mr, &mbus)
 			} else {
-				s.voices[i].run(&l, &r, &s.dbus)
+				s.voices[i].run(&l, &r, &s.bus)
 			}
 		}
 	}
 	if s.params.Mute&LayerDrums != 0 {
-		bus := s.dbus
+		bus := s.bus
 		s.runDrums(&ml, &mr)
-		s.dbus = bus
+		s.bus = bus
 	} else {
 		s.runDrums(&l, &r)
 	}
 	if g := math.Float64frombits(s.musicGain.Load()); g != 1 {
-		l, r, s.dbus = l*g, r*g, s.dbus*g
+		l, r = l*g, r*g
+		s.bus.delay, s.bus.verb = s.bus.delay*g, s.bus.verb*g
 	}
 	s.runShots(&l, &r)
 	// cross-fed stereo delay
 	wl, wr := s.dl[s.dpos], s.dr[s.dpos]
-	s.dl[s.dpos] = flush(s.dbus + wr*0.5)
-	s.dr[s.dpos] = flush(s.dbus*0.7 + wl*0.5)
+	s.dl[s.dpos] = flush(s.bus.delay + wr*0.5)
+	s.dr[s.dpos] = flush(s.bus.delay*0.7 + wl*0.5)
 	s.dpos = (s.dpos + 1) % len(s.dl)
 	l += wl * 0.5
 	r += wr * 0.5
+	vl, vr := s.verb.process(s.bus.verb)
+	l, r = l+vl, r+vr
 	l, r = math.Tanh(l*0.8), math.Tanh(r*0.8)
 	s.meter(l, r)
 	return int16(l * 32000), int16(r * 32000)

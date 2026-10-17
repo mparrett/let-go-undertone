@@ -32,6 +32,7 @@ type ShotSpec struct {
 //	drive drive, bias -1..1                           overdrive the top
 //	crush hold Hz, bits                               sample-hold and quantize the top
 //	send  amount                                      add the top to the delay bus
+//	verb  amount                                      add the top to the reverb bus
 //	out   gain, pan 0..1                              pop and mix
 type UnitSpec struct {
 	Op    string
@@ -39,11 +40,11 @@ type UnitSpec struct {
 	Args  []float64
 }
 
-var opNames = []string{opEnv: "env", opOsc: "osc", opMul: "mul", opLpf: "lpf", opSend: "send", opOut: "out", opPluck: "pluck", opHpf: "hpf", opSvf: "svf", opLfo: "lfo", opDrive: "drive", opCrush: "crush"}
+var opNames = []string{opEnv: "env", opOsc: "osc", opMul: "mul", opLpf: "lpf", opSend: "send", opOut: "out", opPluck: "pluck", opHpf: "hpf", opSvf: "svf", opLfo: "lfo", opDrive: "drive", opCrush: "crush", opVerb: "verb"}
 
 // opArgs is how many Args a unit of each op takes: the parameters its op
 // reads, less an osc's shape, which travels in UnitSpec.Shape.
-var opArgs = []int{opEnv: 4, opOsc: 3, opMul: 0, opLpf: 1, opSend: 1, opOut: 2, opPluck: 2, opHpf: 1, opSvf: 4, opLfo: 2, opDrive: 2, opCrush: 2}
+var opArgs = []int{opEnv: 4, opOsc: 3, opMul: 0, opLpf: 1, opSend: 1, opOut: 2, opPluck: 2, opHpf: 1, opSvf: 4, opLfo: 2, opDrive: 2, opCrush: 2, opVerb: 1}
 
 var shapeNames = []string{shpSine: "sine", shpSaw: "saw", shpPulse: "pulse", shpNoise: "noise"}
 
@@ -140,7 +141,7 @@ func (s ShotSpec) patch() (Patch, error) {
 		switch u.op {
 		case opMul:
 			need = 2
-		case opOut, opLpf, opHpf, opSend, opDrive, opCrush:
+		case opOut, opLpf, opHpf, opSend, opDrive, opCrush, opVerb:
 			need = 1
 		case opSvf:
 			need = 1
@@ -245,7 +246,7 @@ func (us UnitSpec) unit() (Unit, error) {
 	case opCrush:
 		ok = a[0] >= 50 && a[0] <= SampleRate && a[1] >= 1 && a[1] <= 16
 		rule = fmt.Sprintf("hold 50..%d Hz, bits 1..16", SampleRate)
-	case opSend:
+	case opSend, opVerb:
 		ok = a[0] >= 0 && a[0] <= 1
 		rule = "an amount 0..1"
 	case opOut:

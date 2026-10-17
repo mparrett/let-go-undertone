@@ -152,7 +152,7 @@ func (s *Synth) runDrums(l, r *float64) {
 			}
 		}
 		if v.active {
-			v.run(l, r, &s.dbus)
+			v.run(l, r, &s.bus)
 		}
 	}
 }

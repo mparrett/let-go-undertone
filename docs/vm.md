@@ -23,6 +23,7 @@ floats, in the style of sointu and 4klang.
 | `drive` | drive, bias -1..1 | overdrive the top: `tanh(drive·x + bias) − tanh(bias)` |
 | `crush` | hold Hz, bits | sample-hold the top and round it to the bit depth |
 | `send` | amount | add the top to the delay bus |
+| `verb` | amount | add the top to the reverb bus |
 | `out` | gain, pan | pop and mix |
 
 In a `ShotSpec`, an `osc` names its shape in `Shape`, and `Args` holds the
@@ -37,7 +38,8 @@ A frame runs, in order:
 2. the three drum lanes;
 3. the music gain, then the one-shot pool of `nShots` voices, which sits above it;
 4. a cross-fed stereo delay, three rows long, fed by every `send`;
-5. `tanh(0.8x)` on the mix, the only nonlinearity in the chain.
+5. a Freeverb-style reverb fed by every `verb`, skipped until something sends to it;
+6. `tanh(0.8x)` on the mix.
 
 The **sequencer** builds 16-row patterns from the params at each pattern
 boundary, from a seeded rng. Moods turn level and tension into those params
@@ -62,8 +64,10 @@ stays a safety limiter.
 **Noise is one color.** `osc noise` is white noise from an LCG. Pink, brown and
 crackle (sparse impulses) all need a filter or a new source.
 
-**The only space is one delay.** The delay is three rows long, following
-the tempo, and has no damping. There is no reverb.
+**Space is one delay and one room.** The delay is three rows long, following
+the tempo, and has no damping. The reverb is a single long, dark room
+(Freeverb's combs and allpasses, fixed size and damping); a mood cannot
+choose its room yet.
 
 **The sequencer is a fixed grid.** A pattern is 16 rows at two rows per beat,
 so two bars. Drums play 16th notes within it, with swing and probability steps;
@@ -106,10 +110,10 @@ modulation, resonant filtering and grit cover most of the gap.
 
 ## Additions
 
-`svf`, `lfo`, `drive` and `crush` are in, with the `rust` mood as their first
-user: resonant saws swept by slow lfos and overdriven, a sample-and-hold noise
-bed through a crusher, and a driven filter-envelope pulse. The rest are
-candidates. Each keeps the VM's shape: data patches, a fixed stack, no
+`svf`, `lfo`, `drive`, `crush` and the reverb are in, with the `rust` mood as
+their first user: resonant saws swept by slow lfos and overdriven, a
+sample-and-hold noise bed through a crusher, a driven filter-envelope pulse,
+and a dark room around all of it. The rest are candidates. Each keeps the VM's shape: data patches, a fixed stack, no
 allocation on the audio thread, and validation that `ShotSpec` and the fuzz
 test can extend.
 
@@ -124,17 +128,17 @@ test can extend.
    from sample-and-hold are a staple of the industrial sound.
 3. **`drive`: a waveshaper** (done). `tanh(k·x)` with a bias for even harmonics.
 4. **`crush`: hold and bit depth** (done). Mid-tread, so silence stays silent.
-5. **A reverb bus** beside the delay: a damped Schroeder/Freeverb-style network
-   first, a Dattorro plate if that falls short. It is the largest of these
-   additions and the one most likely to show up in a wasm profile.
+5. **A reverb bus** beside the delay (done): a damped Freeverb-style network,
+   with a Dattorro plate as the next step if it falls short.
 6. **Groove ratchets and off-grid hits**, as groove syntax, so syncopation stays
    data.
 
 The cost to watch is per-sample math. A fixed `svf` computes its coefficient
 once per note, as `lpf` does; a swept one recomputes it every 16 samples. On
 2026-10-17 that rendered `rust` at about the cost of `dungeon` natively, where a
-coefficient every sample doubled it. The new ops left the golden renders of the
-other moods byte-identical.
+coefficient every sample doubled it. The reverb then took `rust` to about
+1.6 times `dungeon`'s cost (measured 2026-10-17, native). The new ops left the
+golden renders of the other moods byte-identical.
 
 ## Fitting the knobs
 

@@ -111,7 +111,7 @@ func TestAcceptedShotsAreSafe(t *testing.T) {
 		return pick(usual)
 	}
 	accepted, swept, gritty := 0, 0, 0
-	for i := 0; i < 3000; i++ {
+	for i := 0; i < 6000; i++ {
 		// patch-shaped chains (env, source, mul, filters, out) with random
 		// parameters, so that some pass and the edges of each range are hit
 		unit := func(op string) UnitSpec {
@@ -125,7 +125,7 @@ func TestAcceptedShotsAreSafe(t *testing.T) {
 		var units []UnitSpec
 		for c := 0; c < 1+r.n(3); c++ {
 			units = append(units, unit("env"), unit([]string{"osc", "pluck"}[r.n(2)]), unit("mul"))
-			for _, op := range []string{"lpf", "hpf", "send"} {
+			for _, op := range []string{"lpf", "hpf", "send", "verb"} {
 				if r.n(2) == 0 {
 					units = append(units, unit(op))
 				}
@@ -185,7 +185,7 @@ func TestAcceptedShotsAreSafe(t *testing.T) {
 		}
 	}
 	if accepted < 50 || swept < 10 || gritty < 10 {
-		t.Fatalf("only %d of 3000 random patches were accepted, %d with a swept filter, %d with drive and crush; the test proves little", accepted, swept, gritty)
+		t.Fatalf("only %d of 6000 random patches were accepted, %d with a swept filter, %d with drive and crush; the test proves little", accepted, swept, gritty)
 	}
 	t.Logf("%d random patches accepted and rendered, %d with a swept filter, %d with drive and crush", accepted, swept, gritty)
 }
