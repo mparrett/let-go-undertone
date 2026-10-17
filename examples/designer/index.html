@@ -25,19 +25,29 @@
   #play { min-width: 6.5em; font-size: 15px; border-color: #3d5a47; background: #18241d; }
   #play.on { border-color: var(--tempo); background: #2a2414; }
   .chip { font-size: 13px; color: var(--mut); padding: 4px 9px; }
-  .chip.on { color: var(--fg); border-color: var(--sec, var(--mut)); background: #22222a; }
+  .chip.on { color: var(--fg); border-color: var(--sec, var(--fg)); background: color-mix(in srgb, var(--sec, var(--fg)) 22%, var(--panel)); }
+  .chip small { color: var(--mut); font-size: 11px; margin-left: 4px; }
   label.sl { display: grid; grid-template-columns: 5.5em 1fr 6ch; gap: 8px; align-items: center; font-size: 13px; color: var(--mut); margin: 6px 0; }
   label.sl output { color: var(--fg); text-align: right; }
   .card label.sl.bare { grid-template-columns: 1fr 6ch; }
   input[type=range] { width: 100%; accent-color: var(--sec, var(--tempo)); }
   input[type=text] { width: 100%; }
-  #dock { display: flex; gap: 8px; align-items: stretch; margin: 8px 0; }
+  #dock { display: grid; gap: 8px; margin: 8px 0; }
+  #dock .row { display: flex; gap: 8px; align-items: stretch; }
+  /* the mix: a lit chip is a layer you hear; muting is for listening and never exported */
+  #mix { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  #mix .chip { --sec: var(--layer); padding: 3px 8px; font-size: 12px; }
+  #mix .chip[data-v=drums] { --sec: var(--drum); }
+  #mix .chip[data-v=pulse] { --sec: var(--aud); }
+  #mix .chip.on::before { content: "♪ "; }
+  #mix button { font-size: 12px; padding: 3px 8px; }
+  .card.muted { opacity: .55; }
+  .card.muted .hd span { color: var(--mut); }
   #now { flex: 1; font-size: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; }
   /* on a phone the dock rides the bottom edge, so play is in reach from any section */
   @media (max-width: 899px) {
     #dock { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5; margin: 0; padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
             background: color-mix(in srgb, var(--bg) 92%, transparent); border-top: 1px solid var(--line); backdrop-filter: blur(6px); }
-    body { padding-bottom: 96px; }
   }
   #now .k { color: var(--mut); }
   textarea { width: 100%; min-height: 18em; font: 12px/1.4 ui-monospace, Menlo, monospace; color: var(--fg);
@@ -95,13 +105,16 @@
  <aside>
   <h1>UNDERTONE · DESIGNER</h1>
   <div id="status">loading the engine…</div>
-  <div id="dock"><button id="play" disabled>loading…</button><div id="now">–</div></div>
+  <div id="dock"><div class="row"><button id="play" disabled>loading…</button><div id="now">–</div></div>
+   <div id="mix" title="tap a layer to mute or unmute it; none, then one layer, solos it"></div></div>
   <div class="ctl">
    <div class="lab">START FROM</div>
    <div class="bar" id="moods"></div>
+   <label class="switch" id="buildup" style="margin-left:0;display:inline-flex" title="a mood starts with only the drone; bring layers in from the mix">
+    <input type="checkbox"> build up: start with the drone alone</label>
    <details class="aud">
     <summary><b>AUDITION</b><span id="audsum"></span></summary>
-    <div class="lab">PRESETS</div>
+    <div class="lab">PRESETS <small style="font-weight:400;letter-spacing:0">· each sets level and tension</small></div>
     <div class="bar" id="presets"></div>
     <label class="sl">level <input id="level" type="range" min="-2" max="10" step="1" value="0"><output id="levelv">0</output></label>
     <label class="sl">tension <input id="tension" type="range" min="0" max="1" step="0.05" value="0"><output id="tensionv">0</output></label>
@@ -158,6 +171,10 @@
     { name: "dread", level: 4, tension: 1 },
   ];
   let spec = null, ready = false, playing = false, stashedGrooves = null, grooveCopies = {};
+  // The layers apply() can silence, floor to sky; a line card names the lead "bell".
+  const LAYERS = ["drone", "fifth", "pad", "lead", "air", "pulse", "drums"];
+  const muted = new Set();
+  const layerOf = (line) => line === "bell" ? "lead" : line;
   const lineAt = (l, x) => Math.min(l.hi ?? Infinity, Math.max(l.lo ?? -Infinity, l.base + l.step * x));
   const fmt = (v) => Number.isInteger(v) ? String(v) : v.toFixed(2);
   const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html) e.innerHTML = html; return e; };
@@ -191,7 +208,9 @@
     sweeps.push((level) => {
       const vals = [...Array(11)].map((_, l) => lineAt(spec[k], l)), top = Math.max(c.max, ...vals) || 1;
       [...sw.children].forEach((b, l) => { b.style.height = `${Math.max(0, vals[l]) / top * 100}%`; b.classList.toggle("cur", l === level); });
-      card.querySelector(".hd span").textContent = fmt(lineAt(spec[k], level));
+      const off = muted.has(layerOf(k));
+      card.classList.toggle("muted", off);
+      card.querySelector(".hd span").textContent = (off ? "muted · " : "") + fmt(lineAt(spec[k], level));
     });
     return card;
   }
@@ -234,17 +253,40 @@
   function patchesCard() {
     const card = el("div", "card", `<div class="hd"><b>patches</b></div><div class="note">sounds the mood plays with</div>
       <label class="sl" style="grid-template-columns:5em 1fr">palette <select></select></label>
-      <label class="sl" style="grid-template-columns:5em 1fr">leads <input type="text" title="one of these plays, chosen by the seed; list a name twice to make it likelier"></label>`);
-    const sel = card.querySelector("select"), leads = card.querySelector("input");
+      <div class="lab" style="margin:8px 0 0">LEADS <small style="font-weight:400;letter-spacing:0">· tap to add a copy; the odds follow the copies</small></div>`);
+    const sel = card.querySelector("select"), leads = el("div", "bar");
+    card.append(leads);
     for (const p of JSON.parse(undertoneDesigner.palettes())) sel.append(Object.assign(el("option"), { value: p, textContent: p }));
     sel.onchange = () => { spec.palette = sel.value; changed(); };
-    leads.oninput = () => { spec.leads = leads.value.split(/[\s,]+/).filter(Boolean); changed(); };
-    syncers.push(() => { sel.value = spec.palette; leads.value = spec.leads.join(" "); });
+    syncers.push(() => { sel.value = spec.palette; });
+    // A tap cycles a lead through 0–3 copies. Copies go in after the lead's
+    // last one and the rest keep their places, since the seed picks by index.
+    for (const name of JSON.parse(undertoneDesigner.leads())) {
+      const b = el("span", "chip"); b.dataset.v = name;
+      b.onclick = () => {
+        const n = spec.leads.filter((x) => x === name).length;
+        if (n >= 3) {
+          if (spec.leads.length === n) return; // a mood needs one lead
+          spec.leads = spec.leads.filter((x) => x !== name);
+        } else {
+          const at = spec.leads.lastIndexOf(name);
+          at < 0 ? spec.leads.push(name) : spec.leads.splice(at + 1, 0, name);
+        }
+        sync(); changed();
+      };
+      syncers.push(() => {
+        const n = spec.leads.filter((x) => x === name).length;
+        b.classList.toggle("on", n > 0);
+        b.innerHTML = name + (n ? `<small>${n > 1 ? "×" + n + " · " : ""}${Math.round(100 * n / spec.leads.length)}%</small>` : "");
+      });
+      leads.append(b);
+    }
     summary(card, () => `${spec.palette} · ${[...new Set(spec.leads)].join(" ")}`);
     help(card, `<p><b>palette</b> is a bank of instrument sounds, one for each layer: drone, fifth, pad, air and pulse.
       Changing it changes how every layer sounds, not what they play.</p>
       <p><b>leads</b> is the instrument that plays the melody (the lead layer). Only one plays at a time; the seed,
-      in audition, picks which. A name listed twice is twice as likely.
+      in audition, picks which. Tapping a lead adds a copy, up to three, and a fourth tap removes it;
+      each chip shows its chance of being picked.
       The leads are ${JSON.parse(undertoneDesigner.leads()).join(", ")}.</p>`);
     return card;
   }
@@ -339,7 +381,7 @@
     const [seed, level, tension] = audition();
     showAudition();
     for (const f of sweeps) f(level);
-    const r = JSON.parse(undertoneDesigner.apply(JSON.stringify(spec), seed, level, tension));
+    const r = JSON.parse(undertoneDesigner.apply(JSON.stringify(spec), seed, level, tension, JSON.stringify([...muted])));
     status.classList.toggle("err", !!r.error);
     if (r.error) { status.textContent = r.error; return; }
     status.textContent = playing ? "playing" : "ready: tap play";
@@ -353,11 +395,34 @@
     spec.grooves = spec.grooves || [];
     stashedGrooves = null; grooveCopies = {};
     for (const b of document.querySelectorAll("#moods .chip")) b.classList.toggle("on", b.dataset.v === name);
+    if ($("buildup").querySelector("input").checked) setMuted(LAYERS.filter((l) => l !== "drone"));
     sync(); changed();
   }
 
+  // The mix: a chip per layer, lit while you hear it. "none" and then one
+  // layer is a solo; build up starts every mood that way from the drone.
+  function setMuted(layers) {
+    muted.clear(); for (const l of layers) muted.add(l);
+    for (const b of document.querySelectorAll("#mix .chip")) b.classList.toggle("on", !muted.has(b.dataset.v));
+  }
+  for (const l of LAYERS) {
+    const b = el("span", "chip on", l); b.dataset.v = l;
+    if (l === "pulse") b.title = "tension's pulse: silent at tension 0";
+    b.onclick = () => { muted.has(l) ? muted.delete(l) : muted.add(l); setMuted([...muted]); changed(); };
+    $("mix").append(b);
+  }
+  for (const [label, layers] of [["all", () => []], ["none", () => LAYERS]]) {
+    const b = el("button", "", label); b.onclick = () => { setMuted(layers()); changed(); }; $("mix").append(b);
+  }
+  {
+    const box = $("buildup").querySelector("input");
+    try { box.checked = localStorage.getItem("designer-buildup") === "1"; } catch {}
+    box.onchange = () => { try { localStorage.setItem("designer-buildup", box.checked ? "1" : "0"); } catch {} };
+  }
+
   for (const p of PRESETS) {
-    const b = el("span", "chip", p.name); b.dataset.v = p.name;
+    const b = el("span", "chip", `${p.name}<small>${p.level}${p.tension ? " · " + p.tension : ""}</small>`);
+    b.dataset.v = p.name; b.title = `level ${p.level}, tension ${p.tension}`;
     b.onclick = () => {
       $("level").value = p.level; $("tension").value = p.tension;
       $("levelv").textContent = p.level; $("tensionv").textContent = p.tension; changed();
@@ -388,6 +453,8 @@
   const wide = matchMedia("(min-width: 900px)"), ctl = document.querySelector(".ctl");
   const placeExport = () => (wide.matches ? ctl : document.querySelector("main")).append($("exportbox"));
   wide.addEventListener("change", placeExport); placeExport();
+  // On a phone the dock is fixed and the mix may wrap, so the page pads by its height.
+  new ResizeObserver(() => { document.body.style.paddingBottom = wide.matches ? "" : `${$("dock").offsetHeight + 16}px`; }).observe($("dock"));
 
   window.undertoneDesignerFailed = (msg) => { status.textContent = "audio failed: " + msg; };
   window.undertoneDesignerReady = () => {

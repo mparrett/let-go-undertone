@@ -11,8 +11,9 @@
 //
 //	moods()                  the built-in moods, as JSON
 //	spec(name)               a built-in mood's spec, as JSON (an unbounded clamp is null)
-//	apply(json, seed, level, tension)
-//	                         derive from a spec and play it from the next row; returns
+//	apply(json, seed, level, tension, muted)
+//	                         derive from a spec and play it from the next row, with the
+//	                         layers named in muted (a JSON array) silenced; returns
 //	                         {error} or what was derived: {bpm, key, lead, groove, gains}
 //	edn(json)                the spec as an ambience.lg moods entry
 //	palettes(), grooves()    the names a spec can use, as JSON
@@ -115,6 +116,28 @@ func (j specJSON) spec() engine.MoodSpec {
 
 var noteNames = []string{"C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"}
 
+// layerGain is the parameter that silences a layer the page can mute; the
+// lead is the bell, and pulse is tension's own layer.
+func layerGain(p *engine.Params, layer string) *float64 {
+	switch layer {
+	case "drone":
+		return &p.DroneGain
+	case "fifth":
+		return &p.FifthGain
+	case "pad":
+		return &p.PadDensity
+	case "lead":
+		return &p.BellDensity
+	case "air":
+		return &p.AirGain
+	case "pulse":
+		return &p.PulseGain
+	case "drums":
+		return &p.DrumGain
+	}
+	return nil
+}
+
 func marshal(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
@@ -168,13 +191,24 @@ func main() {
 			if err != nil {
 				return marshal(map[string]string{"error": err.Error()})
 			}
+			// Muting is the designer's, not the spec's: it zeroes what was
+			// derived, tension's additions included, and never reaches the EDN.
+			if len(a) > 4 {
+				var muted []string
+				_ = json.Unmarshal([]byte(a[4].String()), &muted)
+				for _, l := range muted {
+					if g := layerGain(&p, l); g != nil {
+						*g = 0
+					}
+				}
+			}
 			syn.SetParametersNow(p)
 			return marshal(map[string]any{
 				"bpm": math.Round(p.BPM), "key": noteNames[((p.Root%12)+12)%12], "root": p.Root,
 				"scale": p.Scale, "lead": p.LeadName, "groove": p.Groove,
 				"gains": map[string]float64{
 					"drone": p.DroneGain, "fifth": p.FifthGain, "pad": p.PadDensity, "bell": p.BellDensity,
-					"air": p.AirGain, "drums": p.DrumGain, "busy": p.DrumBusy,
+					"air": p.AirGain, "pulse": p.PulseGain, "drums": p.DrumGain, "busy": p.DrumBusy,
 				},
 			})
 		}),
