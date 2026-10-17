@@ -95,6 +95,7 @@ type specJSON struct {
 	Busy     lineJSON `json:"busy"`
 	Swing    float64  `json:"swing"`
 	Tense    float64  `json:"tenseDrums"`
+	Open     lineJSON `json:"open"`
 }
 
 func toJSON(s engine.MoodSpec) specJSON {
@@ -102,7 +103,7 @@ func toJSON(s engine.MoodSpec) specJSON {
 		Name: s.Name, Scales: s.Scales, BPM: toLine(s.BPM), RootBase: s.RootBase, RootStep: s.RootStep,
 		Drone: toLine(s.Drone), Fifth: toLine(s.Fifth), Pad: toLine(s.Pad), Bell: toLine(s.Bell), Air: toLine(s.Air),
 		Calm: s.Calm, BellLift: s.BellLift, Palette: s.Palette, Leads: s.Leads, Grooves: s.Grooves,
-		Drums: toLine(s.Drums), Busy: toLine(s.Busy), Swing: s.Swing, Tense: s.TenseDrums,
+		Drums: toLine(s.Drums), Busy: toLine(s.Busy), Swing: s.Swing, Tense: s.TenseDrums, Open: toLine(s.Open),
 	}
 }
 
@@ -111,7 +112,7 @@ func (j specJSON) spec() engine.MoodSpec {
 		Name: j.Name, Scales: j.Scales, BPM: j.BPM.line(), RootBase: j.RootBase, RootStep: j.RootStep,
 		Drone: j.Drone.line(), Fifth: j.Fifth.line(), Pad: j.Pad.line(), Bell: j.Bell.line(), Air: j.Air.line(),
 		Calm: j.Calm, BellLift: j.BellLift, Palette: j.Palette, Leads: j.Leads, Grooves: j.Grooves,
-		Drums: j.Drums.line(), Busy: j.Busy.line(), Swing: j.Swing, TenseDrums: j.Tense,
+		Drums: j.Drums.line(), Busy: j.Busy.line(), Swing: j.Swing, TenseDrums: j.Tense, Open: j.Open.line(),
 	}
 }
 

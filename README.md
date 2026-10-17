@@ -46,7 +46,8 @@ Music parameters come from game state:
   comes in on an industrial kit).
   Moods are rows in a table (`engine/mood.go`, mirrored in
   `letgo/lg/ambience.lg`), so adding one is an entry in each
-- **level**: depth darkens, slows and thickens; elevation brightens
+- **level**: depth darkens, slows and thickens; elevation brightens; a mood's `open`
+  line can also open or close its resonant filters with level
 - **tension** (0..1): raises tempo, fades in a low pulse, slides the second
   drone from fifth to tritone to minor ninth, thins the calm layers, in a
   mood with drums fills in the shaker and hits harder, and sets grit, which

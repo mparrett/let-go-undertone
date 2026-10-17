@@ -46,6 +46,11 @@ type mood struct {
 	busy    line     // chance each ? step plays
 	swing   float64
 
+	// open is how far the svf filters open with level, -1..1: up to two
+	// octaves of cutoff either way. The zero line leaves them where the
+	// patches set them.
+	open line
+
 	// tenseDrums brings in drums that the level leaves silent: from a
 	// quarter tension they rise to this gain at full, so a fight starts a
 	// beat under a mood that has none at rest.
@@ -164,6 +169,7 @@ var moods = []mood{
 		calm:    -6, // a tritone from the start
 		palette: rustPalette,
 		leads:   rustLeads,
+		open:    lin(0, -0.12), // the filters close as it sinks
 		// no drums at rest; from a quarter tension the machine comes in
 		grooves:    []string{"machine"},
 		drums:      lin(0, 0),
@@ -216,6 +222,7 @@ func (m *mood) derive(seed uint64, level int, tension float64) Params {
 		AirGain:     m.air.at(l) + float64(0.1*t),
 		PulseGain:   t,
 		Grit:        t,
+		Open:        math.Max(-1, math.Min(1, m.open.at(l))),
 		FifthOffset: tenseOffset(m.calm, t),
 		BellLift:    m.bellLift,
 		Palette:     m.palette,

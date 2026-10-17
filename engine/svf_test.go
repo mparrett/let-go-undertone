@@ -121,3 +121,38 @@ func TestLegatoKeepsTheHeldValue(t *testing.T) {
 		t.Errorf("held %v, then %v after a legato retrigger", before, after)
 	}
 }
+
+// Open moves an svf's cutoff: a lowpassed saw keeps more of its top end at
+// open 1 than at 0, and less at -1. It leaves a patch without an svf alone.
+func TestOpenMovesTheCutoff(t *testing.T) {
+	top := func(p Patch, open float64) float64 {
+		var v Voice
+		v.open, v.openTo = open, open
+		v.trigger(p, 45, 1<<20, 1, 1)
+		x := make([]float64, SampleRate/2)
+		for i := range x {
+			var l, r float64
+			var d sends
+			v.run(&l, &r, &d)
+			x[i] = l
+		}
+		// what a 2 kHz highpass lets through: the top end
+		hp, prev, e := 0.0, 0.0, 0.0
+		c := 1 - math.Exp(-2*math.Pi*2000/SampleRate)
+		for _, s := range x[SampleRate/4:] {
+			hp += c * (s - hp)
+			prev = s - hp
+			e += prev * prev
+		}
+		return e
+	}
+	svf := Patch{held, {opOsc, [4]float64{0, shpSaw, 0, 1}}, {opMul, [4]float64{}},
+		{opSvf, [4]float64{400, 0.3, 0, 0}}, {opOut, [4]float64{1, 0}}}
+	if shut, rest, wide := top(svf, -1), top(svf, 0), top(svf, 1); !(shut < rest && rest < wide) {
+		t.Errorf("top end %.3g closed, %.3g at rest, %.3g open: want rising", shut, rest, wide)
+	}
+	plain := Patch{held, {opOsc, [4]float64{0, shpSaw, 0, 1}}, {opMul, [4]float64{}}, {opOut, [4]float64{1, 0}}}
+	if a, b := top(plain, 0), top(plain, 1); a != b {
+		t.Errorf("open changed a patch with no svf: %v vs %v", a, b)
+	}
+}

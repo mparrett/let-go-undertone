@@ -88,3 +88,16 @@ func TestMoodSpecEDN(t *testing.T) {
 		t.Error("a mood without drums exports drum keys")
 	}
 }
+
+// An open line that only a clamp moves still exports, and reads back as
+// the same mood.
+func TestOpenClampExports(t *testing.T) {
+	s, _ := MoodByName("dungeon")
+	if strings.Contains(s.EDN(), ":open") {
+		t.Error("a mood with no open line exports one")
+	}
+	s.Open.Lo = 0.3
+	if !strings.Contains(s.EDN(), ":open      {:base 0.0 :step 0.0 :lo 0.3}") {
+		t.Errorf("a clamped open line was dropped:\n%s", s.EDN())
+	}
+}
