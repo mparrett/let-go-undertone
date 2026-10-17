@@ -11,8 +11,9 @@
 //
 //	moods()                  the built-in moods, as JSON
 //	spec(name)               a built-in mood's spec, as JSON (an unbounded clamp is null)
-//	apply(json, seed, level, tension)
-//	                         derive from a spec and play it from the next row; returns
+//	apply(json, seed, level, tension, muted)
+//	                         derive from a spec and play it from the next row, with the
+//	                         layers named in muted (a JSON array) silenced; returns
 //	                         {error} or what was derived: {bpm, key, lead, groove, gains}
 //	edn(json)                the spec as an ambience.lg moods entry
 //	palettes(), grooves()    the names a spec can use, as JSON
@@ -115,6 +116,12 @@ func (j specJSON) spec() engine.MoodSpec {
 
 var noteNames = []string{"C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"}
 
+// layers are the names the page mutes by; pulse is tension's own layer.
+var layers = map[string]engine.Layers{
+	"drone": engine.LayerDrone, "fifth": engine.LayerFifth, "pad": engine.LayerPad, "lead": engine.LayerLead,
+	"air": engine.LayerAir, "pulse": engine.LayerPulse, "drums": engine.LayerDrums,
+}
+
 func marshal(v any) string {
 	b, _ := json.Marshal(v)
 	return string(b)
@@ -168,13 +175,22 @@ func main() {
 			if err != nil {
 				return marshal(map[string]string{"error": err.Error()})
 			}
+			// Muting is the designer's, not the spec's, so it never reaches
+			// the EDN; the engine silences the layers at the mix.
+			if len(a) > 4 {
+				var muted []string
+				_ = json.Unmarshal([]byte(a[4].String()), &muted)
+				for _, l := range muted {
+					p.Mute |= layers[l]
+				}
+			}
 			syn.SetParametersNow(p)
 			return marshal(map[string]any{
 				"bpm": math.Round(p.BPM), "key": noteNames[((p.Root%12)+12)%12], "root": p.Root,
 				"scale": p.Scale, "lead": p.LeadName, "groove": p.Groove,
 				"gains": map[string]float64{
 					"drone": p.DroneGain, "fifth": p.FifthGain, "pad": p.PadDensity, "bell": p.BellDensity,
-					"air": p.AirGain, "drums": p.DrumGain, "busy": p.DrumBusy,
+					"air": p.AirGain, "pulse": p.PulseGain, "drums": p.DrumGain, "busy": p.DrumBusy,
 				},
 			})
 		}),
