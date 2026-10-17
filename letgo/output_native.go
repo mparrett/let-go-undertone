@@ -24,9 +24,10 @@ var (
 // is unreachable, even mid-playback (oto#293).
 type otoOutput struct{ player *oto.Player }
 
-// Close silences the player; oto v3.4+ releases it once Stop drops the last
-// reference, so there is no Player.Close to call.
-func (o *otoOutput) Close()  { o.player.Pause() }
+// Close stops the player and waits out any read in flight, so the synth is
+// not read after Stop returns. Player.Close is a deprecated no-op since oto
+// v3.4; PauseAndStopReading is what takes the player out of oto's mixer.
+func (o *otoOutput) Close()  { o.player.PauseAndStopReading() }
 func (o *otoOutput) Pause()  { o.player.Pause() }
 func (o *otoOutput) Resume() { o.player.Play() }
 
