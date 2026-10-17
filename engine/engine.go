@@ -949,10 +949,29 @@ func (s *Synth) apply(p Params) {
 	s.params = p
 	s.cur.Store(&p)
 	s.samplesPerRow = int(SampleRate * 60 / (p.BPM * 2)) // 2 rows per beat: ambient rows are long
-	if s.dl == nil {
-		s.dl = make([]float64, s.samplesPerRow*3)
-		s.dr = make([]float64, s.samplesPerRow*3)
+	s.fitDelay(s.samplesPerRow * 3)
+}
+
+// fitDelay keeps the delay three rows long as the tempo changes; set once,
+// it fell off the grid as soon as tension raised the tempo. A shorter line
+// reslices the same buffer. A longer one reuses spare capacity, cleared so
+// no old echo resurfaces, and allocates only for a tempo slower than any
+// this synth has played.
+func (s *Synth) fitDelay(n int) {
+	if n == len(s.dl) {
+		return
 	}
+	if n > cap(s.dl) {
+		s.dl, s.dr = make([]float64, n), make([]float64, n)
+	} else {
+		old := len(s.dl)
+		s.dl, s.dr = s.dl[:n], s.dr[:n]
+		if n > old {
+			clear(s.dl[old:])
+			clear(s.dr[old:])
+		}
+	}
+	s.dpos %= n
 }
 
 func (s *Synth) step() {
