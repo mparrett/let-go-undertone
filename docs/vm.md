@@ -145,8 +145,10 @@ scales every `out` and `send`.
 game can set it on its own. From 0 to 1 it triples `drive`, scaled back so a
 full-scale input peaks where it did; it takes four bits off `crush` and lowers
 its hold rate by an octave and a half; and it moves `svf` resonance 60% of the
-way to its maximum. Patches without those units ignore it, so the other moods
-render as before.
+way to its maximum. A sounding note glides to a new grit over about a tenth
+of a second, and the units recompute their constants only as it moves.
+One-shots stay at grit 0, as they stay at full level under the music gain.
+Patches without those units ignore it, so the other moods render as before.
 
 **Open** is the next candidate: driven by level, it would scale `svf` cutoff,
 so a rising level opens the filters instead of only adding layers.

@@ -8,7 +8,7 @@ import (
 // playGrit runs a patch on one voice at a grit for n samples.
 func playGrit(p Patch, grit float64, n int) []float64 {
 	var v Voice
-	v.grit = grit
+	v.grit, v.gritTo = grit, grit
 	v.trigger(p, 69, 1<<20, 1, 1)
 	out := make([]float64, n)
 	for i := range out {
@@ -94,5 +94,41 @@ func TestGritSharpensTheSvf(t *testing.T) {
 	}
 	if r0, r1 := reject(0), reject(1); r1 < 1.5*r0 {
 		t.Errorf("pass/reject %0.1f at grit 0, %0.1f at grit 1", r0, r1)
+	}
+}
+
+// A grit change reaches a sounding note as a glide, not a step: the first
+// sample after it is still at the old grit, and it settles within a quarter
+// of a second.
+func TestGritGlidesOnASoundingNote(t *testing.T) {
+	p, _ := DeriveMood("rust", 1, 0, 0)
+	s := NewSynth(p)
+	render(s, SampleRate)
+	v := &s.voices[0]
+	if !v.active || v.grit != 0 {
+		t.Fatalf("the drone is not sounding at grit 0 (active %v, grit %v)", v.active, v.grit)
+	}
+	p.Grit = 1
+	s.SetParametersNow(p)
+	render(s, s.rowLeft+160) // ten glide steps past the row where it applies
+	if v.gritTo != 1 || v.grit >= 0.5 {
+		t.Errorf("a row after the change, grit is %v toward %v: want a glide under way", v.grit, v.gritTo)
+	}
+	render(s, SampleRate/4)
+	if v.grit != 1 {
+		t.Errorf("a quarter second later grit is %v, want 1", v.grit)
+	}
+}
+
+// One-shots stay at grit 0 whatever the music's grit, as they stay at full
+// level whatever its gain.
+func TestShotsIgnoreGrit(t *testing.T) {
+	p := silentParams
+	p.Grit = 1
+	s := NewSynth(p)
+	for _, v := range s.fx.shots {
+		if v.grit != 0 || v.gritTo != 0 {
+			t.Fatalf("a shot voice has grit %v toward %v", v.grit, v.gritTo)
+		}
 	}
 }

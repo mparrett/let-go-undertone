@@ -60,6 +60,8 @@ type ustate struct {
 	ks                    []float64 // Karplus-Strong delay line, allocated on first sample
 	kpos                  int       // pluck: read position; swept svf: control-rate counter
 	k                     float64   // cached per-note coefficient: osc phase increment (no sweep) or lpf c
+	g, g1, g2             float64   // svf, drive, crush: constants derived from grit g
+	gset                  bool      // g1 and g2 hold for grit g
 	kset                  bool
 }
 
@@ -71,7 +73,11 @@ type Voice struct {
 	gateRows int
 	units    []ustate
 	active   bool
-	grit     float64 // Params.Grit, kept current by apply: roughens drive, crush and svf
+	// grit roughens drive, crush and svf. It glides to gritTo, which apply
+	// keeps at Params.Grit, so a sounding note roughens over about a tenth of
+	// a second rather than stepping. gtick counts samples between glide steps.
+	grit, gritTo float64
+	gtick        int
 
 	// gateSamples is the one-shot lane's gate clock (sfx.go). Sequencer
 	// voices gate in rows via step(); one-shots are off the grid, so their
@@ -133,6 +139,19 @@ func (v *Voice) level() float64 {
 	return l * v.gain
 }
 
+// glideGrit moves grit a step toward gritTo every 16 samples, so the units it
+// scales recompute their constants at control rate, not every sample.
+func (v *Voice) glideGrit() {
+	v.gtick = (v.gtick + 1) & 15
+	if v.gtick != 0 {
+		return
+	}
+	v.grit += (v.gritTo - v.grit) * 0.02
+	if math.Abs(v.gritTo-v.grit) < 1e-3 {
+		v.grit = v.gritTo
+	}
+}
+
 // samePatch reports whether a and b are the same patch value. Patches are
 // package-level tables, so identity is the first unit's address.
 func samePatch(a, b Patch) bool {
@@ -141,6 +160,9 @@ func samePatch(a, b Patch) bool {
 
 // run executes the patch for one sample, accumulating into l/r.
 func (v *Voice) run(l, r, delay *float64) {
+	if v.grit != v.gritTo {
+		v.glideGrit()
+	}
 	var stack [8]float64
 	sp := 0
 	alive := false
@@ -250,8 +272,11 @@ func (v *Voice) run(l, r, delay *float64) {
 			// resonance 1 leaves k at 0.2, a Q of 5: it rings and whistles
 			// but never self-oscillates, so a voice still dies with its env,
 			// and the lowpass peak at the cutoff stays within 14 dB
-			res := u.p[1] + (1-u.p[1])*0.6*v.grit
-			g, k := s.k, 2-1.8*res
+			if !s.gset || s.g != v.grit {
+				res := u.p[1] + (1-u.p[1])*0.6*v.grit
+				s.g, s.g1, s.gset = v.grit, 2-1.8*res, true
+			}
+			g, k := s.k, s.g1
 			a1 := 1 / (1 + g*(g+k))
 			a2 := g * a1
 			x := stack[sp-1]
@@ -292,12 +317,11 @@ func (v *Voice) run(l, r, delay *float64) {
 			// than raising its peak. The bias makes the curve lopsided, for
 			// the even harmonics of an overdriven amp, and is subtracted
 			// back out so silence stays silent.
-			k := u.p[0] * (1 + 2*v.grit)
-			y := math.Tanh(k*stack[sp-1]+u.p[1]) - math.Tanh(u.p[1])
-			if v.grit > 0 {
-				y *= math.Tanh(u.p[0]) / math.Tanh(k)
+			if !s.gset || s.g != v.grit {
+				k := u.p[0] * (1 + 2*v.grit)
+				s.g, s.g1, s.g2, s.gset = v.grit, k, math.Tanh(u.p[0])/math.Tanh(k), true
 			}
-			stack[sp-1] = y
+			stack[sp-1] = (math.Tanh(s.g1*stack[sp-1]+u.p[1]) - math.Tanh(u.p[1])) * s.g2
 		case opCrush:
 			// Sample-rate reduction then bit depth, both computed only when
 			// a new sample is held. Grit takes off up to four bits and
@@ -305,11 +329,15 @@ func (v *Voice) run(l, r, delay *float64) {
 			if !s.kset { // a new note holds its first sample at once
 				s.phase, s.kset = 1, true
 			}
-			s.phase += u.p[0] * math.Exp2(-1.5*v.grit) / SampleRate
+			if !s.gset || s.g != v.grit {
+				s.g, s.gset = v.grit, true
+				s.g1 = u.p[0] * math.Exp2(-1.5*v.grit) / SampleRate
+				s.g2 = math.Exp2(max(1, u.p[1]-4*v.grit) - 1)
+			}
+			s.phase += s.g1
 			if s.phase >= 1 {
 				s.phase -= math.Floor(s.phase)
-				q := math.Exp2(max(1, u.p[1]-4*v.grit) - 1)
-				s.lp = math.Round(stack[sp-1]*q) / q
+				s.lp = math.Round(stack[sp-1]*s.g2) / s.g2
 			}
 			stack[sp-1] = s.lp
 		case opPluck:
@@ -981,7 +1009,8 @@ func (s *Synth) SetParameters(p Params) { s.next.Store(&p) }
 // SetParametersNow stages p for the next row instead of the next pattern:
 // for an editor, where a tempo or voice change should be heard at once. The
 // generator's notes for the rest of this pattern were already drawn from the
-// old parameters, so only tempo and the voices of new notes change mid-way.
+// old parameters, so only tempo and the voices of new notes change mid-way,
+// and grit, which sounding notes glide to.
 // Safe to call from any goroutine.
 func (s *Synth) SetParametersNow(p Params) { s.now.Store(&p) }
 
@@ -991,9 +1020,14 @@ func (s *Synth) apply(p Params) {
 	s.cur.Store(&p)
 	s.samplesPerRow = int(SampleRate * 60 / (p.BPM * 2)) // 2 rows per beat: ambient rows are long
 	s.fitDelay(s.samplesPerRow * 3)
-	for _, vs := range [][]Voice{s.voices, s.dvoices[:], s.fx.shots[:]} {
+	// The music's voices only: one-shots stay at grit 0, as they stay at
+	// full level under SetMusicGain, so an sfx sounds the same in any fight.
+	for _, vs := range [][]Voice{s.voices, s.dvoices[:]} {
 		for i := range vs {
-			vs[i].grit = p.Grit
+			vs[i].gritTo = p.Grit
+			if !vs[i].active {
+				vs[i].grit = p.Grit
+			}
 		}
 	}
 }
