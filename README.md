@@ -26,6 +26,8 @@ The module has these parts:
 
 [VISION.md](VISION.md) says what undertone is for and what it won't be.
 
+[docs/vm.md](docs/vm.md) explains how the synth VM makes a sample and where its limits are.
+
 `cmd/lghost` is a minimal lg runner with the binding linked in, for trying the
 namespace without lgx.
 
