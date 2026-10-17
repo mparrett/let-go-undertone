@@ -44,3 +44,23 @@ func TestReverbStaysOffWithoutSends(t *testing.T) {
 		t.Error("rust sends to the reverb, yet it is off")
 	}
 }
+
+// The reverb turns off once its last send has rung out, and a room that
+// rang before renders a new send exactly as a fresh one does.
+func TestReverbTurnsOffWhenQuiet(t *testing.T) {
+	used, fresh := newReverb(), newReverb()
+	used.process(1)
+	for range verbIdle {
+		used.process(0)
+	}
+	if used.on {
+		t.Fatal("the reverb is still running after its tail rang out")
+	}
+	for i := range SampleRate {
+		in := float64(i % 2)
+		a, b := used.process(in)
+		if c, d := fresh.process(in); a != c || b != d {
+			t.Fatalf("sample %d: a used room renders %v,%v, a fresh one %v,%v", i, a, b, c, d)
+		}
+	}
+}

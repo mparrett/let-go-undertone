@@ -996,6 +996,10 @@ func (s *Synth) Levels() [4]float64 {
 }
 
 func NewSynth(p Params) *Synth {
+	// The reverb's lines (about 200 KB) are allocated here for every synth,
+	// even one whose mood never sends to it: a mood or one-shot that does may
+	// arrive at any pattern boundary, on the audio thread, which must not
+	// allocate them.
 	s := &Synth{voices: make([]Voice, nTracks), verb: newReverb()}
 	s.musicGain.Store(math.Float64bits(1))
 	s.apply(p)

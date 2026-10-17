@@ -178,6 +178,10 @@ func TestAcceptedShotsAreSafe(t *testing.T) {
 			var l, rr float64
 			for f := 0; f < SampleRate/20; f++ {
 				syn.runShots(&l, &rr)
+				// the sends too: a shot's verb must not break the room
+				vl, _ := syn.verb.process(syn.bus.verb)
+				syn.bus = sends{}
+				l += vl
 			}
 			if math.IsNaN(l) || math.IsInf(l, 0) {
 				t.Fatalf("an accepted patch rendered %v: %+v", l, units)

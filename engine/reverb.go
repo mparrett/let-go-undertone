@@ -11,8 +11,13 @@ type sends struct{ delay, verb float64 }
 type reverb struct {
 	comb [2][8]combLine
 	ap   [2][4]allpass
-	on   bool // set by the first send; a synth that never sends skips the work
+	on   bool // set by a send; off again once the room has been quiet a while
+	idle int  // samples since the last send
 }
+
+// verbIdle is how long after its last send the reverb turns off: past the
+// tail's fall below -100 dB (TestReverbTailDecays), so nothing audible is cut.
+const verbIdle = 12 * SampleRate
 
 type combLine struct {
 	buf   []float64
@@ -51,10 +56,32 @@ func newReverb() *reverb {
 	return v
 }
 
+// clear silences the room and turns it off, so what it renders next does not
+// depend on how long ago it last rang.
+func (v *reverb) clear() {
+	for ch := range 2 {
+		for i := range v.comb[ch] {
+			c := &v.comb[ch][i]
+			clear(c.buf)
+			c.pos, c.store = 0, 0
+		}
+		for i := range v.ap[ch] {
+			clear(v.ap[ch][i].buf)
+			v.ap[ch][i].pos = 0
+		}
+	}
+	v.on, v.idle = false, 0
+}
+
 // process takes one sample of the reverb bus and returns the wet stereo pair.
 func (v *reverb) process(in float64) (float64, float64) {
 	if in != 0 {
-		v.on = true
+		v.on, v.idle = true, 0
+	} else if v.on {
+		if v.idle++; v.idle >= verbIdle {
+			v.clear()
+			return 0, 0
+		}
 	}
 	if !v.on {
 		return 0, 0

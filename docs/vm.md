@@ -38,7 +38,8 @@ A frame runs, in order:
 2. the three drum lanes;
 3. the music gain, then the one-shot pool of `nShots` voices, which sits above it;
 4. a cross-fed stereo delay, three rows long, fed by every `send`;
-5. a Freeverb-style reverb fed by every `verb`, skipped until something sends to it;
+5. a Freeverb-style reverb fed by every `verb`, skipped while nothing has sent
+   to it for 12 seconds;
 6. `tanh(0.8x)` on the mix.
 
 The **sequencer** builds 16-row patterns from the params at each pattern
