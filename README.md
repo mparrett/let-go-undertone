@@ -127,8 +127,11 @@ Triggers sent before the music starts are dropped silently.
 
 The natives act on a default `letgo.Music`. A Go host that wants to own the
 instance creates one with `letgo.NewMusic` and calls `letgo.SetMusic` before
-running lg code. Hosts with no filesystem (`GOOS=js`) can load the embedded
-`ambience` namespace with `letgo.LoadEmbedded`.
+running lg code. Importing the package also registers `undertone.ambience`,
+the lg derivation, so `(require '[undertone.ambience :as ambience])` resolves in
+any binary that links it, with no source path: a custom `lg`, a `cli.Main`
+host, a browser build. A Go host can call `letgo.LoadEmbedded`, which requires
+it as `ambience` in the host's namespace.
 
 ### With lgx
 
@@ -150,9 +153,9 @@ lg:
 (audio/trigger {:shot :footstep :gain 0.3 :pan 0.4})
 ```
 
-The `ambience` namespace that derives full parameter maps from
-`(seed, depth, tension)` is at `letgo/lg/ambience.lg`. Put that directory on
-your load path, or embed it as above.
+The `undertone.ambience` namespace that derives full parameter maps from
+`(seed, depth, tension)` comes with the import, as above; its source is
+`letgo/lg/ambience.lg`.
 
 ### Without lgx
 
@@ -191,8 +194,9 @@ func main() {
 }
 ```
 
-Run the program with this binary in place of `lg`. Put `letgo/lg` on
-`-source-paths` if it uses `ambience`. To keep one codebase that also runs on a
+Run the program with this binary in place of `lg`. The import also registers
+`undertone.ambience`, so a program that uses it requires
+`[undertone.ambience :as ambience]` with no source path. To keep one codebase that also runs on a
 stock `lg`, where there is no `audio` namespace, look the natives up at runtime:
 `(resolve 'audio/trigger)` is nil there.
 

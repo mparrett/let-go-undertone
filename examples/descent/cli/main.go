@@ -48,7 +48,7 @@ import (
 
 func main() {
 	loadPath := flag.String("load-path", "lg", "directory for any namespaces beyond the embedded ones")
-	nsName := flag.String("ns", "ambience", "lg namespace to require")
+	nsName := flag.String("ns", "[undertone.ambience :as ambience]", "lg namespace to require, or a libspec")
 	expr := flag.String("e", "", "lg expression to run after the namespace loads")
 	demo := flag.Bool("demo", false, "walk demo.lg's scripted descent-and-fight arc")
 	dry := flag.Bool("dry", false, "with -demo: print the tension trace, make no sound")
@@ -65,9 +65,9 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	// ambience ships inside undertone, not in this directory, so the
-	// demo's namespaces load from the embedded copies; the load path is only
-	// for namespaces a caller adds.
+	// undertone.ambience ships inside undertone, registered by its init, and
+	// the demo's namespaces load from the embedded copies; the load path is
+	// only for namespaces a caller adds.
 	if err := host.LoadEmbedded(c); err != nil {
 		fmt.Fprintln(os.Stderr, "lg:", err)
 		os.Exit(1)
