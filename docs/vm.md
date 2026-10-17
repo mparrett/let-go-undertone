@@ -59,10 +59,8 @@ voice can be overdriven, folded, clipped, bit-reduced or sample-held on its own.
 **Noise is one color.** `osc noise` is white noise from an LCG. Pink, brown and
 crackle (sparse impulses) all need a filter or a new source.
 
-**The only space is one delay.** The delay is three rows long and has no
-damping. Its length is set from the tempo at the first `apply` and never
-changes, so once tension raises the tempo it no longer lands on the grid. There
-is no reverb.
+**The only space is one delay.** The delay is three rows long, following
+the tempo, and has no damping. There is no reverb.
 
 **The sequencer is a fixed grid.** A pattern is 16 rows at two rows per beat,
 so two bars. Drums play 16th notes within it, with swing and probability steps;

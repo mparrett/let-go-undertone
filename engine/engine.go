@@ -14,6 +14,7 @@ import (
 	"errors"
 	"math"
 	"os"
+	"slices"
 	"sync/atomic"
 )
 
@@ -949,10 +950,43 @@ func (s *Synth) apply(p Params) {
 	s.params = p
 	s.cur.Store(&p)
 	s.samplesPerRow = int(SampleRate * 60 / (p.BPM * 2)) // 2 rows per beat: ambient rows are long
-	if s.dl == nil {
-		s.dl = make([]float64, s.samplesPerRow*3)
-		s.dr = make([]float64, s.samplesPerRow*3)
+	s.fitDelay(s.samplesPerRow * 3)
+}
+
+// fitDelay keeps the delay three rows long as the tempo changes; set once,
+// it fell off the grid as soon as tension raised the tempo. The ring is first
+// rotated to read from its start, so the echoes due soonest play on without a
+// jump; a shorter line keeps those, and a longer one follows them with
+// silence rather than an old echo. Only a tempo slower than any this synth has
+// played allocates.
+func (s *Synth) fitDelay(n int) {
+	if n == len(s.dl) {
+		return
 	}
+	for _, d := range []*[]float64{&s.dl, &s.dr} {
+		line := *d
+		rotate(line, s.dpos)
+		if n > cap(line) {
+			grown := make([]float64, n)
+			copy(grown, line)
+			*d = grown
+			continue
+		}
+		old := len(line)
+		line = line[:n]
+		if n > old {
+			clear(line[old:])
+		}
+		*d = line
+	}
+	s.dpos = 0
+}
+
+// rotate moves a[k:] to the front of a, in place.
+func rotate(a []float64, k int) {
+	slices.Reverse(a[:k])
+	slices.Reverse(a[k:])
+	slices.Reverse(a)
 }
 
 func (s *Synth) step() {
