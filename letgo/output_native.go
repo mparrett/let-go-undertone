@@ -24,7 +24,9 @@ var (
 // is unreachable, even mid-playback (oto#293).
 type otoOutput struct{ player *oto.Player }
 
-func (o *otoOutput) Close()  { o.player.Close() }
+// Close silences the player; oto v3.4+ releases it once Stop drops the last
+// reference, so there is no Player.Close to call.
+func (o *otoOutput) Close()  { o.player.Pause() }
 func (o *otoOutput) Pause()  { o.player.Pause() }
 func (o *otoOutput) Resume() { o.player.Play() }
 
