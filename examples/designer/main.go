@@ -5,8 +5,7 @@
 // made, at any level and tension. The page exports the spec as an entry for
 // the moods map in letgo/lg/ambience.lg.
 //
-//	GOOS=js GOARCH=wasm go build -o examples/designer/main.wasm ./examples/designer
-//	cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" examples/designer/
+//	just designer    # builds main.wasm, copies wasm_exec.js, serves on :8373
 //
 // JS surface, on window.undertoneDesigner:
 //
