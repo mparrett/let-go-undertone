@@ -100,7 +100,8 @@ func soloLevel(d int) float64 {
 			v.gate = false
 		}
 		if v.active {
-			var l, r, dl float64
+			var l, r float64
+			var dl sends
 			v.run(&l, &r, &dl)
 			if x := (l + r) / 2; math.Abs(x) > 1e-3 {
 				sum += x * x
@@ -238,7 +239,7 @@ func TestDrumStrikeIsFresh(t *testing.T) {
 		var v Voice
 		v.strike(d, 1, 1)
 		var l, r float64
-		var bus float64
+		var bus sends
 		for range SampleRate / 50 {
 			v.run(&l, &r, &bus)
 		}

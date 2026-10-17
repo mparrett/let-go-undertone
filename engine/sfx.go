@@ -520,7 +520,7 @@ func (s *Synth) runShots(l, r *float64) {
 			}
 		}
 		var sl, sr float64
-		v.run(&sl, &sr, &s.dbus)
+		v.run(&sl, &sr, &s.bus)
 		mono := sl + sr
 		*l += mono * (1 - fx.pan[i])
 		*r += mono * fx.pan[i]

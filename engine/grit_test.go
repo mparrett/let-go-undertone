@@ -12,7 +12,8 @@ func playGrit(p Patch, grit float64, n int) []float64 {
 	v.trigger(p, 69, 1<<20, 1, 1)
 	out := make([]float64, n)
 	for i := range out {
-		var l, r, d float64
+		var l, r float64
+		var d sends
 		v.run(&l, &r, &d)
 		out[i] = l
 	}
