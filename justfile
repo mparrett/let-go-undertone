@@ -15,7 +15,7 @@ lint:
 
 # build the mood designer and serve it on localhost:{{port}}
 designer port="8373": designer-build
-    python3 -m http.server -d examples/designer {{port}}
+    python3 examples/serve.py {{port}} designer
 
 designer-build:
     GOOS=js GOARCH=wasm go build -o examples/designer/main.wasm ./examples/designer
