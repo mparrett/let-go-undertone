@@ -924,7 +924,7 @@ type Synth struct {
 	pats          [nTracks][rows]trackRow
 	dl, dr        []float64 // delay lines
 	dpos          int
-	bus           sends   // this frame's delay and reverb sends
+	bus           sends // this frame's delay and reverb sends
 	verb          *reverb
 	fx            sfx // one-shot lane (sfx.go); the sequencer never sees it
 
