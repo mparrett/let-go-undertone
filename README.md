@@ -97,17 +97,19 @@ crypt, _ := engine.MoodByName("dungeon")
 crypt.Name = "crypt"
 crypt.BPM.Base -= 10
 crypt.Leads = []string{"clang", "clang"}
-p, err := crypt.Derive(seed, level, tension) // an error for an unknown palette, lead or groove
+p, err := crypt.Derive(seed, level, tension)
+if err != nil { // an unknown palette, lead or groove
+	return err
+}
 synth.SetParameters(p)
 ```
 
 From lg, a mood is a map in the shape of `ambience/moods`, with a `:palette`:
 
 ```clojure
-(def crypt (assoc (get ambience/moods :dungeon)
-                  :palette :dungeon
-                  :bpm {:base 56.0 :step -3.0}
-                  :leads [:clang :clang]))
+(def crypt (-> (get ambience/moods :dungeon)
+               (assoc :palette :dungeon :leads [:clang :clang])
+               (update-in [:bpm :base] - 10.0)))
 (ambience/score-spec! crypt seed level tension)
 ```
 
