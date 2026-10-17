@@ -202,7 +202,8 @@ func (s MoodSpec) EDN() string {
 	if s.Palette != "" { // a bare ":" would not read back
 		fmt.Fprintf(&b, " :palette   :%s\n", s.Palette)
 	}
-	if s.Open.Base != 0 || s.Open.Step != 0 { // the zero line is the default
+	// the default is the zero line, unclamped; a clamp alone still moves it
+	if s.Open.Base != 0 || s.Open.Step != 0 || !math.IsInf(s.Open.Lo, -1) || !math.IsInf(s.Open.Hi, 1) {
 		fmt.Fprintf(&b, " :open      %s\n", ln(s.Open))
 	}
 	fmt.Fprintf(&b, " :leads     %s", kws(s.Leads))

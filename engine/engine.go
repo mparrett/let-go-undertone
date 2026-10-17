@@ -142,8 +142,9 @@ func (v *Voice) level() float64 {
 	return l * v.gain
 }
 
-// glideGrit moves grit a step toward gritTo every 16 samples, so the units it
-// scales recompute their constants at control rate, not every sample.
+// glideKnobs moves grit and open a step toward their targets every 16
+// samples, so the units they scale recompute their constants at control
+// rate, not every sample.
 func (v *Voice) glideKnobs() {
 	v.gtick = (v.gtick + 1) & 15
 	if v.gtick != 0 {
@@ -1105,10 +1106,18 @@ func (s *Synth) apply(p Params) {
 	// full level under SetMusicGain, so an sfx sounds the same in any fight.
 	for _, vs := range [][]Voice{s.voices, s.dvoices[:]} {
 		for i := range vs {
-			vs[i].gritTo, vs[i].openTo = p.Grit, p.Open
+			vs[i].gritTo = p.Grit
 			if !vs[i].active {
-				vs[i].grit, vs[i].open = p.Grit, p.Open
+				vs[i].grit = p.Grit
 			}
+		}
+	}
+	// Open reaches the bed only: a drum's filters are its tuning, which a
+	// level should not move.
+	for i := range s.voices {
+		s.voices[i].openTo = p.Open
+		if !s.voices[i].active {
+			s.voices[i].open = p.Open
 		}
 	}
 }

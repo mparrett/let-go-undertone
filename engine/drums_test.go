@@ -384,3 +384,20 @@ func TestRustPlaysTheIndustrialKit(t *testing.T) {
 		t.Error("the village lost its kick")
 	}
 }
+
+// Open reaches the bed, not the drums: a kit's filters are its tuning.
+func TestOpenLeavesTheDrumsAlone(t *testing.T) {
+	p, _ := DeriveMood("rust", 1, 5, 1)
+	if p.Open >= 0 {
+		t.Fatalf("rust at level 5 derives open %v; the test needs it closing", p.Open)
+	}
+	s := NewSynth(p)
+	if s.voices[0].openTo != p.Open {
+		t.Errorf("the drone's open is %v, want %v", s.voices[0].openTo, p.Open)
+	}
+	for d, v := range s.dvoices {
+		if v.open != 0 || v.openTo != 0 {
+			t.Errorf("drum lane %d has open %v toward %v", d, v.open, v.openTo)
+		}
+	}
+}
