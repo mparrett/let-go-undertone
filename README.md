@@ -85,6 +85,37 @@ A game adds its own shots at runtime with `engine.RegisterShot` or
 could not run safely, one that would overrun the VM's stack or let an envelope
 diverge, is refused with the reason.
 
+### Your own moods
+
+A game can bring moods of its own without a fork. A mood is data: lines in
+level, scales, leads and grooves, naming one of the built-in palettes for its
+patches. Start from a built-in, change what differs, and derive parameters
+from it as from any mood:
+
+```go
+crypt, _ := engine.MoodByName("dungeon")
+crypt.Name = "crypt"
+crypt.BPM.Base -= 10
+crypt.Leads = []string{"clang", "clang"}
+p, err := crypt.Derive(seed, level, tension) // an error for an unknown palette, lead or groove
+synth.SetParameters(p)
+```
+
+From lg, a mood is a map in the shape of `ambience/moods`, with a `:palette`:
+
+```clojure
+(def crypt (assoc (get ambience/moods :dungeon)
+                  :palette :dungeon
+                  :bpm {:base 56.0 :step -3.0}
+                  :leads [:clang :clang]))
+(ambience/score-spec! crypt seed level tension)
+```
+
+The [designer](examples/designer) shapes one by ear and exports it as that
+map (`MoodSpec.EDN`). `engine.PaletteNames`, `LeadNames` and `GrooveNames` list
+what a mood can name. Patches themselves stay built-in; a game's own one-shot
+sounds go through `audio/register-shot` (`engine.RegisterShot` from Go).
+
 ### Determinism
 
 The same parameters render byte-identical audio **on one CPU architecture**.
