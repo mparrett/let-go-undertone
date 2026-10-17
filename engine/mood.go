@@ -22,7 +22,8 @@ func (l line) at(x float64) float64 {
 // mood is a patch bank plus a point in parameter space, and how that point
 // moves as the level rises. Tension works the same in every mood, so it is
 // not in the table: tempo up, pulse in, the second drone sliding to a tritone
-// and a minor ninth, the calm layers thinning.
+// and a minor ninth, the calm layers thinning, and drums, where a mood has
+// them, busier and harder.
 type mood struct {
 	name     string
 	scales   [][]int // indexed by level/2; the last one holds for higher levels
@@ -194,13 +195,17 @@ func (m *mood) derive(seed uint64, level int, tension float64) Params {
 	}
 	pickLead(&p, m.leads)
 	if len(m.grooves) > 0 {
-		// In a mood with drums, tension drives them too: the shaker fills in
-		// and the hits land harder, so a fight builds a beat on top of the
-		// level's. A mood without drums gets none from tension.
+		// Tension drives drums that are playing: the shaker fills in and the
+		// hits land harder, so a fight builds a beat on top of the level's.
+		// Drums at zero gain stay silent, and the gain keeps the mood's own
+		// ceiling, which is set for balance against the bed; busy is a chance,
+		// so tension may push it past the level's ceiling, up to certainty.
 		// float64() keeps each product rounded on its own: without it arm64
 		// fuses the multiply-add, and lg, which cannot, derives other bits.
-		p.DrumGain += float64(0.15 * t)
-		p.DrumBusy = min(1, p.DrumBusy+float64(0.4*t))
+		if p.DrumGain > 0 {
+			p.DrumGain = math.Min(m.drums.hi, p.DrumGain+float64(0.15*t))
+			p.DrumBusy = min(1, p.DrumBusy+float64(0.4*t))
+		}
 		pickGroove(&p, m.grooves)
 	}
 	return p

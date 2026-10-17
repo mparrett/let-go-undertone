@@ -232,7 +232,13 @@
         t (clamp01 tension)
         s (seed-state seed level)
         [s bpm-jitter] (draw-n s 5)
-        [_ root-off]   (draw-pick s root-offsets)]
+        [_ root-off]   (draw-pick s root-offsets)
+        dg (if (:drums m) (line-at (:drums m) l) 0.0)
+        db (if (:busy m) (line-at (:busy m) l) 0.0)
+        ;; tension drives drums that are playing; the gain keeps the line's
+        ;; ceiling, and busy may rise to certainty (see engine/mood.go)
+        driven (and (seq (:grooves m)) (pos? dg))
+        dhi (:hi (:drums m))]
     {:seed         seed
      :bpm          (+ (line-at (:bpm m) l) (double bpm-jitter) (* 30.0 t))
      :root         (+ (:root-base m) (* (:root-step m) level) root-off)
@@ -248,8 +254,8 @@
      :lead         (pick-lead seed (:leads m))
      ;; drums: moods without grooves send :none and a zero gain
      :groove       (if (:grooves m) (pick-groove seed (:grooves m)) :none)
-     :drum-gain    (if (:drums m) (+ (line-at (:drums m) l) (* 0.15 t)) 0.0)
-     :drum-busy    (if (:busy m) (min 1.0 (+ (line-at (:busy m) l) (* 0.4 t))) 0.0)
+     :drum-gain    (if driven (let [v (+ dg (* 0.15 t))] (if dhi (min dhi v) v)) dg)
+     :drum-busy    (if driven (min 1.0 (+ db (* 0.4 t))) db)
      :swing        (get m :swing 0.0)
      :palette      (get m :palette)}))
 
