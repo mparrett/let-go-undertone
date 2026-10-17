@@ -70,6 +70,12 @@ music's key. A repeat of the same shot at the same note within 30 ms is
 dropped, so a cascade of hits in one frame plays once; when the pool is full, a
 new shot takes the quietest voice.
 
+A game adds its own shots at runtime with `engine.RegisterShot` or
+`audio/register-shot`. A `ShotSpec` is a patch and a gate as data, and
+`ShotByName` gives any built-in in that form to start from. A patch the synth
+could not run safely, one that would overrun the VM's stack or let an envelope
+diverge, is refused with the reason.
+
 ### Determinism
 
 The same parameters render byte-identical audio **on one CPU architecture**.
@@ -101,7 +107,9 @@ interop:
 |---|---|
 | `audio/set-parameters` | one map, merged over the current state, applied at the next pattern boundary; unknown keys are ignored |
 | `audio/music-start`, `audio/music-stop` | playback |
+| `audio/set-music-gain` | the music's level under the one-shots, 0..1 |
 | `audio/trigger` | a trigger map (`{:shot :hit :gain 0.8 :pan 0.3}`) or a vector of them; fire-and-forget |
+| `audio/register-shot` | a game's own one-shot (`{:name :ping :gate-ms 20 :patch [[:env 0.001 0.2 0 0.1] [:osc 0 :sine 0 1] [:mul] [:out 0.5 0.5]]}`); a patch the synth could not run safely is an error |
 | `audio/render-wav` | `(audio/render-wav "out.wav" 20.0)`: offline render, for checking determinism without a sound card |
 
 The surface is write-only: nothing reads audio state back into lg, so game

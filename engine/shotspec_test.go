@@ -1,0 +1,156 @@
+package engine
+
+import (
+	"bytes"
+	"math"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+// Every built-in shot taken through ShotSpec builds the same patch, and
+// registered under another name it plays the same samples.
+func TestShotSpecRoundTrip(t *testing.T) {
+	for name, d := range shotLib {
+		s, ok := ShotByName(name)
+		if !ok {
+			t.Fatalf("%s: no spec", name)
+		}
+		s.Name = "copy-of-" + name
+		p, err := s.patch()
+		if err != nil || !reflect.DeepEqual(p, d.patch) || s.GateMS != d.gateMS {
+			t.Fatalf("%s: the spec builds a different patch (%v)", name, err)
+		}
+		if err := RegisterShot(s); err != nil {
+			t.Fatal(err)
+		}
+		a, b := NewSynth(silentParams), NewSynth(silentParams)
+		a.Trigger(name, 52, 1, 0.3, 0, 9)
+		b.Trigger(s.Name, 52, 1, 0.3, 0, 9)
+		if !bytes.Equal(render(a, SampleRate/2), render(b, SampleRate/2)) {
+			t.Errorf("%s: the registered copy sounds different", name)
+		}
+	}
+}
+
+// A spec the synth could not run safely is refused with a reason, and
+// nothing is registered.
+func TestRegisterShotRefusesUnsafePatches(t *testing.T) {
+	env := UnitSpec{Op: "env", Args: []float64{0.001, 0.1, 0, 0.05}}
+	osc := UnitSpec{Op: "osc", Shape: "sine", Args: []float64{0, 0, 1}}
+	mul, out := UnitSpec{Op: "mul"}, UnitSpec{Op: "out", Args: []float64{0.5, 0.5}}
+	ok := []UnitSpec{env, osc, mul, out}
+	if err := RegisterShot(ShotSpec{Name: "beep", GateMS: 10, Units: ok}); err != nil {
+		t.Fatalf("a plain patch was refused: %v", err)
+	}
+	with := func(i int, u UnitSpec) []UnitSpec {
+		us := append([]UnitSpec(nil), ok...)
+		us[i] = u
+		return us
+	}
+	nine := []UnitSpec{env}
+	for i := 0; i < 8; i++ {
+		nine = append(nine, osc)
+	}
+	for _, c := range []struct {
+		why  string
+		spec ShotSpec
+		says string
+	}{
+		{"a built-in's name", ShotSpec{Name: "hit", Units: ok}, "built-in"},
+		{"no name", ShotSpec{Units: ok}, "name"},
+		{"an unknown op", ShotSpec{Name: "x", GateMS: 10, Units: with(2, UnitSpec{Op: "add"})}, "unknown op"},
+		{"an unknown shape", ShotSpec{Name: "x", GateMS: 10, Units: with(1, UnitSpec{Op: "osc", Shape: "square", Args: []float64{0, 0, 1}})}, "shape"},
+		{"too few args", ShotSpec{Name: "x", GateMS: 10, Units: with(3, UnitSpec{Op: "out", Args: []float64{0.5}})}, "args"},
+		{"a zero decay", ShotSpec{Name: "x", GateMS: 10, Units: with(0, UnitSpec{Op: "env", Args: []float64{0, 0, 0, 0.05}})}, "decay"},
+		{"a NaN", ShotSpec{Name: "x", GateMS: 10, Units: with(3, UnitSpec{Op: "out", Args: []float64{0.5, nan()}})}, "finite"},
+		{"a pluck that rings forever", ShotSpec{Name: "x", GateMS: 10, Units: with(1, UnitSpec{Op: "pluck", Args: []float64{0, 1}})}, "feedback"},
+		{"a mul on one value", ShotSpec{Name: "x", GateMS: 10, Units: []UnitSpec{env, mul, out}}, "run dry"},
+		{"nine on the stack", ShotSpec{Name: "x", GateMS: 10, Units: nine}, "overflow"},
+		{"no out", ShotSpec{Name: "x", GateMS: 10, Units: []UnitSpec{env}}, "out"},
+		{"a gate that never closes", ShotSpec{Name: "x", GateMS: 0, Units: ok}, "gate"},
+		{"a release of hours", ShotSpec{Name: "x", GateMS: 10, Units: with(0, UnitSpec{Op: "env", Args: []float64{0, 0.1, 0, 3600}})}, "release"},
+	} {
+		err := RegisterShot(c.spec)
+		if err == nil || !strings.Contains(err.Error(), c.says) {
+			t.Errorf("%s: got %v, want an error saying %q", c.why, err, c.says)
+		}
+	}
+	if _, ok := lookupShot("x"); ok {
+		t.Error("a refused spec was registered")
+	}
+	if !NewSynth(silentParams).Trigger("beep", 60, 1, 0.5, 0, 1) {
+		t.Error("a registered shot cannot be triggered")
+	}
+}
+
+func nan() float64 { var z float64; return z / z }
+
+func TestShotSpecEDN(t *testing.T) {
+	s, _ := ShotByName("hit")
+	want := "{:name :hit :gate-ms 25.0\n :patch [[:env 0.001 0.11 0.0 0.05]\n         [:osc 0.0 :sine 26.0 0.03]"
+	if e := s.EDN(); !strings.HasPrefix(e, want) {
+		t.Errorf("EDN:\n%s\nwant it to start:\n%s", e, want)
+	}
+}
+
+// Whatever RegisterShot accepts, the synth runs: random patches that pass
+// validation render without a panic and stay finite.
+func TestAcceptedShotsAreSafe(t *testing.T) {
+	r := rng{12345}
+	pick := func(xs []float64) float64 { return xs[r.n(len(xs))] }
+	vals := []float64{-60, -48, -1, 0, 1e-9, 0.001, 0.3, 0.99, 1, 2, 30, 900, 22050, 30000}
+	usual := []float64{1e-9, 0.001, 0.3, 0.5, 0.99, 1}
+	arg := func() float64 {
+		if r.n(10) == 0 {
+			return pick(vals)
+		}
+		return pick(usual)
+	}
+	accepted := 0
+	for i := 0; i < 3000; i++ {
+		// patch-shaped chains (env, source, mul, filters, out) with random
+		// parameters, so that some pass and the edges of each range are hit
+		unit := func(op string) UnitSpec {
+			k := opArity[indexOf(opNames, op)]
+			if op == "osc" {
+				k = 3
+			}
+			u := UnitSpec{Op: op, Shape: shapeNames[r.n(len(shapeNames))]}
+			for a := 0; a < k; a++ {
+				u.Args = append(u.Args, arg())
+			}
+			return u
+		}
+		var units []UnitSpec
+		for c := 0; c < 1+r.n(3); c++ {
+			units = append(units, unit("env"), unit([]string{"osc", "pluck"}[r.n(2)]), unit("mul"))
+			for _, op := range []string{"lpf", "hpf", "send"} {
+				if r.n(2) == 0 {
+					units = append(units, unit(op))
+				}
+			}
+			units = append(units, unit("out"))
+		}
+		s := ShotSpec{Name: "fuzz", GateMS: pick(vals), Units: units}
+		if RegisterShot(s) != nil {
+			continue
+		}
+		accepted++
+		syn := NewSynth(silentParams)
+		syn.Trigger("fuzz", 20+r.n(90), 1, 0.5, 0, uint64(i))
+		for range 4 {
+			var l, rr float64
+			for f := 0; f < SampleRate/20; f++ {
+				syn.runShots(&l, &rr)
+			}
+			if math.IsNaN(l) || math.IsInf(l, 0) {
+				t.Fatalf("an accepted patch rendered %v: %+v", l, units)
+			}
+		}
+	}
+	if accepted < 50 {
+		t.Fatalf("only %d of 3000 random patches were accepted; the test proves little", accepted)
+	}
+	t.Logf("%d random patches accepted and rendered", accepted)
+}
