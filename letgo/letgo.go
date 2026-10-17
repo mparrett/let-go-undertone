@@ -112,6 +112,7 @@ func (m *Music) setParameters(v vm.Value) (vm.Value, error) {
 	flt(lgm, "air-gain", &m.params.AirGain)
 	flt(lgm, "pulse-gain", &m.params.PulseGain)
 	flt(lgm, "grit", &m.params.Grit)
+	flt(lgm, "open", &m.params.Open)
 	integer(lgm, "fifth-offset", &m.params.FifthOffset)
 	integer(lgm, "bell-lift", &m.params.BellLift)
 	if sc, ok := ints(lgm, "scale"); ok {

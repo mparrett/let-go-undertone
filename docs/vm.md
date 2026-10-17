@@ -162,8 +162,10 @@ of a second, and the units recompute their constants only as it moves.
 One-shots stay at grit 0, as they stay at full level under the music gain.
 Patches without those units ignore it, so the other moods render as before.
 
-**Open** is the next candidate: driven by level, it would scale `svf` cutoff,
-so a rising level opens the filters instead of only adding layers.
+**Open** (`Params.Open`, `:open`) is in too: a mood line in level, clamped to
+-1..1, that moves every `svf` cutoff up to two octaves either way, gliding as
+grit does. A level can then open or close the filters instead of only adding
+layers; `rust` closes them as it sinks. Moods without the line leave it at 0.
 
 An industrial mood is then a palette that uses the new ops and a set of lines
 like any other mood. The tension story stays the same and only sounds harsher.

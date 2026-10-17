@@ -65,6 +65,7 @@ type ustate struct {
 	k                     float64   // cached per-note coefficient: osc phase increment (no sweep) or lpf c
 	g, g1, g2             float64   // svf, drive, crush: constants derived from grit g; osc: g1 is its bend ratio
 	gset                  bool      // g1 and g2 hold for grit g
+	ko                    float64   // svf: the open its coefficient k was computed at
 	kset                  bool
 }
 
@@ -80,6 +81,7 @@ type Voice struct {
 	// keeps at Params.Grit, so a sounding note roughens over about a tenth of
 	// a second rather than stepping. gtick counts samples between glide steps.
 	grit, gritTo float64
+	open, openTo float64 // Params.Open, gliding the same way: scales svf cutoff
 	gtick        int
 
 	// gateSamples is the one-shot lane's gate clock (sfx.go). Sequencer
@@ -142,17 +144,22 @@ func (v *Voice) level() float64 {
 	return l * v.gain
 }
 
-// glideGrit moves grit a step toward gritTo every 16 samples, so the units it
-// scales recompute their constants at control rate, not every sample.
-func (v *Voice) glideGrit() {
+// glideKnobs moves grit and open a step toward their targets every 16
+// samples, so the units they scale recompute their constants at control
+// rate, not every sample.
+func (v *Voice) glideKnobs() {
 	v.gtick = (v.gtick + 1) & 15
 	if v.gtick != 0 {
 		return
 	}
-	v.grit += (v.gritTo - v.grit) * 0.02
-	if math.Abs(v.gritTo-v.grit) < 1e-3 {
-		v.grit = v.gritTo
+	glide := func(x *float64, to float64) {
+		*x += (to - *x) * 0.02
+		if math.Abs(to-*x) < 1e-3 {
+			*x = to
+		}
 	}
+	glide(&v.grit, v.gritTo)
+	glide(&v.open, v.openTo)
 }
 
 // samePatch reports whether a and b are the same patch value. Patches are
@@ -163,8 +170,8 @@ func samePatch(a, b Patch) bool {
 
 // run executes the patch for one sample, accumulating into l/r.
 func (v *Voice) run(l, r *float64, b *sends) {
-	if v.grit != v.gritTo {
-		v.glideGrit()
+	if v.grit != v.gritTo || v.open != v.openTo {
+		v.glideKnobs()
 	}
 	var stack [8]float64
 	sp := 0
@@ -273,14 +280,16 @@ func (v *Voice) run(l, r *float64, b *sends) {
 				// filter's cost; a sweep that fast is still smooth
 				sp--
 				if s.kpos == 0 {
-					fc *= math.Exp2(stack[sp] * u.p[3])
+					fc *= math.Exp2(stack[sp]*u.p[3] + 2*v.open)
 					fc = max(20, min(fc, 0.45*SampleRate))
 					s.k = math.Tan(math.Pi * fc / SampleRate)
 				}
 				s.kpos = (s.kpos + 1) & 15
-			} else if !s.kset {
-				s.k = math.Tan(math.Pi * min(fc, 0.45*SampleRate) / SampleRate)
-				s.kset = true
+			} else if !s.kset || s.ko != v.open {
+				// open moves the cutoff up to two octaves either way
+				fc *= math.Exp2(2 * v.open)
+				s.k = math.Tan(math.Pi * max(20, min(fc, 0.45*SampleRate)) / SampleRate)
+				s.kset, s.ko = true, v.open
 			}
 			// resonance 1 leaves k at 0.2, a Q of 5: it rings and whistles
 			// but never self-oscillates, so a voice still dies with its env,
@@ -775,6 +784,11 @@ type Params struct {
 	// tension; patches without those units ignore it.
 	Grit float64
 
+	// Open moves the svf filters' cutoffs, -1..1: up to two octaves up or
+	// down. Moods derive it from level, so a mood can open or close as a game
+	// goes deeper; patches without an svf ignore it.
+	Open float64
+
 	// Mute silences layers at the mix, for listening to a mood a layer at a
 	// time. A muted layer still plays, unheard, so the patterns and the rng
 	// draws are those of the full mix; zeroing a density or gain instead would
@@ -1119,6 +1133,14 @@ func (s *Synth) apply(p Params) {
 			}
 		}
 	}
+	// Open reaches the bed only: a drum's filters are its tuning, which a
+	// level should not move.
+	for i := range s.voices {
+		s.voices[i].openTo = p.Open
+		if !s.voices[i].active {
+			s.voices[i].open = p.Open
+		}
+	}
 }
 
 // fitDelay keeps the delay three rows long as the tempo changes; set once,
@@ -1334,6 +1356,10 @@ func (p Params) sanitized() Params {
 		p.Grit = 0
 	}
 	p.Grit = min(p.Grit, 1)
+	if math.IsNaN(p.Open) {
+		p.Open = 0
+	}
+	p.Open = max(-1, min(p.Open, 1))
 	return p
 }
 

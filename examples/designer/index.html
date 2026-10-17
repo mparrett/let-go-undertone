@@ -91,6 +91,7 @@
   .sweep { display: flex; align-items: flex-end; gap: 2px; height: 30px; margin-top: 8px; }
   .sweep i { flex: 1; background: var(--line); border-radius: 2px 2px 0 0; min-height: 1px; }
   .sweep i.cur { background: var(--sec); }
+  .sweep i.neg { opacity: .5; }
   .sweepcap { display: flex; justify-content: space-between; font-size: 10px; color: var(--mut); margin-top: 2px; }
   .off .cards { opacity: .35; pointer-events: none; }
   /* the drums switch */
@@ -155,6 +156,7 @@
       { line: "pad",   ...GAIN, note: "pad chords: how often they play" },
       { line: "bell",  ...GAIN, note: "the lead: how often it plays" },
       { line: "air",   ...GAIN, note: "the top: air or breeze gain" },
+      { line: "open",  min: -1, max: 1, step: 0.05, smin: -0.3, smax: 0.3, sstep: 0.01, note: "the resonant filters: level opens (+) or closes (−) them, up to two octaves" },
     ]},
     { id: "drum", title: "DRUMS", note: "kick, backbeat, top: the palette's kit", toggle: true, items: [
       { grooves: true },
@@ -207,8 +209,17 @@
     for (let l = 0; l <= 10; l++) sw.append(el("i"));
     card.append(cl, sw, el("div", "sweepcap", "<span>level 0</span><span>value by level · lit = now</span><span>10</span>"));
     sweeps.push((level) => {
-      const vals = [...Array(11)].map((_, l) => lineAt(spec[k], l)), top = Math.max(c.max, ...vals) || 1;
-      [...sw.children].forEach((b, l) => { b.style.height = `${Math.max(0, vals[l]) / top * 100}%`; b.classList.toggle("cur", l === level); });
+      // a signed line (open) draws its size, dimmed below zero, so a
+      // closing slope shows as well as an opening one
+      const signed = c.min < 0, vals = [...Array(11)].map((_, l) => lineAt(spec[k], l));
+      const top = signed ? Math.max(-c.min, c.max) : Math.max(c.max, ...vals) || 1;
+      [...sw.children].forEach((b, l) => {
+        // open derives clamped to its range, so draw it that way
+        const v = signed ? Math.min(Math.abs(vals[l]), top) : Math.max(0, vals[l]);
+        b.style.height = `${v / top * 100}%`;
+        b.classList.toggle("neg", vals[l] < 0);
+        b.classList.toggle("cur", l === level);
+      });
       const off = muted.has(layerOf(k));
       card.classList.toggle("muted", off);
       card.querySelector(".hd span").textContent = (off ? "muted · " : "") + fmt(lineAt(spec[k], level));
