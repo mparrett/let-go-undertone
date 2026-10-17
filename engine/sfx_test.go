@@ -123,8 +123,18 @@ func TestShotVoicesDie(t *testing.T) {
 
 func TestPoolOverflowStealsInsteadOfGrowing(t *testing.T) {
 	s := NewSynth(silentParams)
-	for i := 0; i < nShots*4; i++ {
-		s.Trigger("hit", 45, 0.5, 0.5, float64(i), uint64(i))
+	for i := 0; i < nShots*4; i++ { // distinct notes, so the repeat gap thins none of them
+		s.Trigger("hit", 45+i, 0.5, 0.5, float64(i), uint64(i))
+	}
+	render(s, SampleRate*nShots*4/1000)
+	busy := 0
+	for i := range s.fx.shots {
+		if s.fx.shots[i].active {
+			busy++
+		}
+	}
+	if busy != nShots {
+		t.Fatalf("%d of %d shot voices busy: the burst never filled the pool", busy, nShots)
 	}
 	render(s, SampleRate) // must not panic, and everything must still decay
 	render(s, SampleRate*3)
@@ -253,5 +263,26 @@ func TestShotRepeatsWithinTheGapAreDropped(t *testing.T) {
 		if got := active(s); got != c.want {
 			t.Errorf("%s: %d shot voices started, want %d", c.name, got, c.want)
 		}
+	}
+}
+
+// Of repeats in the same frame the loudest plays, with its own pan.
+func TestLouderRepeatInTheSameFrameWins(t *testing.T) {
+	s := NewSynth(silentParams)
+	s.Trigger("hit", 40, 0.1, 0, 0, 1)
+	s.Trigger("hit", 40, 1, 1, 0, 2)
+	s.Trigger("hit", 40, 0.5, 0.5, 0, 3)
+	render(s, 64)
+	n := 0
+	for i := range s.fx.shots {
+		if v := &s.fx.shots[i]; v.active {
+			n++
+			if v.gain != 1 || s.fx.pan[i] != 1 {
+				t.Errorf("the hit that played has gain %v pan %v, want the loudest: 1, 1", v.gain, s.fx.pan[i])
+			}
+		}
+	}
+	if n != 1 {
+		t.Errorf("%d hits started, want 1", n)
 	}
 }
