@@ -45,6 +45,11 @@ type mood struct {
 	drums   line     // drum gain
 	busy    line     // chance each ? step plays
 	swing   float64
+
+	// tenseDrums brings in drums that the level leaves silent: from a
+	// quarter tension they rise to this gain at full, so a fight starts a
+	// beat under a mood that has none at rest.
+	tenseDrums float64
 }
 
 var moods = []mood{
@@ -159,6 +164,11 @@ var moods = []mood{
 		calm:    -6, // a tritone from the start
 		palette: rustPalette,
 		leads:   rustLeads,
+		// no drums at rest; from a quarter tension the machine comes in
+		grooves:    []string{"machine"},
+		drums:      lin(0, 0),
+		busy:       lin(0.3, 0.05).atMost(0.6),
+		tenseDrums: 0.75,
 	},
 	// Candidates for later moods, on the dark-to-bright axis:
 	//   - Past dungeon, darker (Void, Below or Hades): lower and slower
@@ -225,6 +235,9 @@ func (m *mood) derive(seed uint64, level int, tension float64) Params {
 		// fuses the multiply-add, and lg, which cannot, derives other bits.
 		if p.DrumGain > 0 {
 			p.DrumGain = math.Min(m.drums.hi, p.DrumGain+float64(0.15*t))
+			p.DrumBusy = min(1, p.DrumBusy+float64(0.4*t))
+		} else if m.tenseDrums > 0 && t > 0.25 {
+			p.DrumGain = float64(m.tenseDrums * float64((t-0.25)/0.75))
 			p.DrumBusy = min(1, p.DrumBusy+float64(0.4*t))
 		}
 		pickGroove(&p, m.grooves)

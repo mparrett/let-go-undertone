@@ -14,7 +14,7 @@ func TestGroovesAreWellFormed(t *testing.T) {
 			if len(lane) != 2*rows {
 				t.Errorf("%s lane %d: %d steps, want %d", name, d, len(lane), 2*rows)
 			}
-			if i := strings.IndexFunc(lane, func(c rune) bool { return !strings.ContainsRune("Xxo.?f", c) }); i >= 0 {
+			if i := strings.IndexFunc(lane, func(c rune) bool { return !strings.ContainsRune("Xxo.?frR", c) }); i >= 0 {
 				t.Errorf("%s lane %d: step %d is %q", name, d, i, lane[i])
 			}
 		}
@@ -28,7 +28,8 @@ func TestGroovesAreWellFormed(t *testing.T) {
 	}
 }
 
-// Drums belong to the moods that ask for them; the rest stay silent.
+// Drums belong to the moods that ask for them; the rest stay silent. Rust's
+// come only with tension: none at rest or at a quarter, a beat at a half.
 func TestDrumsOnlyInRhythmicMoods(t *testing.T) {
 	for _, name := range MoodNames() {
 		for level := 0; level <= 5; level++ {
@@ -41,9 +42,15 @@ func TestDrumsOnlyInRhythmicMoods(t *testing.T) {
 					}
 				}
 			}
-			if rhythmic := name == "village"; rhythmic != (hits > 0) {
+			if rhythmic := name == "village" || name == "rust"; rhythmic != (hits > 0) {
 				t.Errorf("%s level %d: %d drum hits", name, level, hits)
 			}
+		}
+	}
+	for _, tension := range []float64{0, 0.25} {
+		p, _ := DeriveMood("rust", 1, 3, tension)
+		if p.DrumGain != 0 {
+			t.Errorf("rust at tension %v: drums at %v, want none", tension, p.DrumGain)
 		}
 	}
 }
@@ -237,7 +244,7 @@ func TestSeedGridWritesTheGroove(t *testing.T) {
 func TestDrumStrikeIsFresh(t *testing.T) {
 	for d := range nDrums {
 		var v Voice
-		v.strike(d, 1, 1)
+		v.strike(drumKit[d], 1, 1)
 		var l, r float64
 		var bus sends
 		for range SampleRate / 50 {
@@ -246,7 +253,7 @@ func TestDrumStrikeIsFresh(t *testing.T) {
 		if !v.active {
 			t.Fatalf("lane %d went quiet within 20 ms; the test needs it sounding", d)
 		}
-		v.strike(d, 1, 2)
+		v.strike(drumKit[d], 1, 2)
 		for i, u := range v.units {
 			if u.env != 0 || u.phase != 0 {
 				t.Errorf("lane %d unit %d: re-hit kept env %.3g phase %.3g", d, i, u.env, u.phase)
@@ -329,5 +336,45 @@ func TestTensionDrivesTheDrums(t *testing.T) {
 	quiet.Drums = Line{0, 0, math.Inf(-1), math.Inf(1)}
 	if p, _ := quiet.Derive(1, 3, 1); p.DrumGain != 0 {
 		t.Errorf("drums set to zero gain play at %v under tension", p.DrumGain)
+	}
+}
+
+// A ratchet strikes its lane three times within its 16th, each quieter than
+// the one before, and is done before the next 16th lands.
+func TestRatchetStrikesThreeTimesInItsSixteenth(t *testing.T) {
+	p, _ := DeriveMood("rust", 1, 0, 1)
+	s := NewSynth(p)
+	s.drums = [nDrums][rows]drumHit{}
+	s.drums[1][0] = drumHit{on: 0.7, onN: 3}
+	s.row = 0
+	s.stepDrums()
+	gains := []float64{s.dvoices[1].gain}
+	half := s.samplesPerRow / 2
+	for s.rowLeft = half; s.rowLeft > 0; s.rowLeft-- { // up to the off 16th
+		before := s.dvoices[1].gain
+		var l, r float64
+		s.runDrums(&l, &r)
+		if g := s.dvoices[1].gain; g != before {
+			gains = append(gains, g)
+		}
+	}
+	if len(gains) != 3 || !(gains[0] > gains[1] && gains[1] > gains[2]) {
+		t.Fatalf("struck at gains %v, want three, falling", gains)
+	}
+}
+
+// Rust's drums are its own kit, not the village's.
+func TestRustPlaysTheIndustrialKit(t *testing.T) {
+	p, _ := DeriveMood("rust", 1, 0, 1)
+	s := NewSynth(p)
+	for d := range nDrums {
+		if !samePatch(s.sound(d).patch, industrialKit[d].patch) {
+			t.Errorf("lane %d plays another kit", d)
+		}
+	}
+	v, _ := DeriveMood("village", 1, 0, 1)
+	s = NewSynth(v)
+	if !samePatch(s.sound(0).patch, kick) {
+		t.Error("the village lost its kick")
 	}
 }

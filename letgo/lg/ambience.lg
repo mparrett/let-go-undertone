@@ -103,6 +103,7 @@
 (def village-leads   [:kalimba :kalimba :pluck :pluck :reed])
 (def village-grooves [:amble :amble :skip :stomp])
 (def rust-leads      [:clang :clang :pluck :chime])
+(def rust-grooves    [:machine])
 
 (defn tense-offset
   "Slide the second drone's interval toward dissonance: the mood's calm
@@ -234,7 +235,13 @@
     :air       {:base 0.35 :step 0.05 :hi 0.7}
     :calm      -6 ; a tritone from the start
     :bell-lift 0
-    :leads     rust-leads}})
+    :leads     rust-leads
+    ;; no drums at rest; from a quarter tension the machine comes in
+    :grooves   rust-grooves
+    :drums     {:base 0.0 :step 0.0}
+    :busy      {:base 0.3 :step 0.05 :hi 0.6}
+    :swing     0.0
+    :tense-drums 0.75}})
 
 (defn line-at
   "Evaluate a mood line at level x."
@@ -258,7 +265,10 @@
         ;; tension drives drums that are playing; the gain keeps the line's
         ;; ceiling, and busy may rise to certainty (see engine/mood.go)
         driven (and (seq (:grooves m)) (pos? dg))
-        dhi (:hi (:drums m))]
+        dhi (:hi (:drums m))
+        ;; drums the level leaves silent arrive with tension, from a quarter
+        td (:tense-drums m)
+        tense (and (seq (:grooves m)) (not driven) td (pos? td) (> t 0.25))]
     {:seed         seed
      :bpm          (+ (line-at (:bpm m) l) (double bpm-jitter) (* 30.0 t))
      :root         (+ (:root-base m) (* (:root-step m) level) root-off)
@@ -275,8 +285,10 @@
      :lead         (pick-lead seed (:leads m))
      ;; drums: moods without grooves send :none and a zero gain
      :groove       (if (:grooves m) (pick-groove seed (:grooves m)) :none)
-     :drum-gain    (if driven (let [v (+ dg (* 0.15 t))] (if dhi (min dhi v) v)) dg)
-     :drum-busy    (if driven (min 1.0 (+ db (* 0.4 t))) db)
+     :drum-gain    (cond driven (let [v (+ dg (* 0.15 t))] (if dhi (min dhi v) v))
+                         tense  (* td (/ (- t 0.25) 0.75))
+                         :else  dg)
+     :drum-busy    (if (or driven tense) (min 1.0 (+ db (* 0.4 t))) db)
      :swing        (get m :swing 0.0)
      :palette      (get m :palette)}))
 

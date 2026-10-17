@@ -100,7 +100,7 @@ func (s *Synth) applyGrid(g *Grid, row int) {
 		}
 	}
 	for d, lane := range g.Drums {
-		s.drums[d][row] = drumHit{gridDrumGain * drumAt(lane, 2*row), gridDrumGain * drumAt(lane, 2*row+1)}
+		s.drums[d][row] = drumHit{on: gridDrumGain * drumAt(lane, 2*row), off: gridDrumGain * drumAt(lane, 2*row+1)}
 	}
 	s.pats[trackLead][row] = trackRow{}
 	if d := g.Lead[row]; d > 0 {

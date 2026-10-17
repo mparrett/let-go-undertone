@@ -156,11 +156,12 @@
       { line: "bell",  ...GAIN, note: "the lead: how often it plays" },
       { line: "air",   ...GAIN, note: "the top: air or breeze gain" },
     ]},
-    { id: "drum", title: "DRUMS", note: "kick, clap, shaker", toggle: true, items: [
+    { id: "drum", title: "DRUMS", note: "kick, backbeat, top: the palette's kit", toggle: true, items: [
       { grooves: true },
       { line: "drums", ...GAIN, note: "drum gain" },
       { line: "busy",  ...GAIN, note: "how full the shaker is: the chance each optional hit plays" },
       { int: "swing", min: 0, max: 0.33, step: 0.01, note: "off-16th push (0.17 ≈ triplet)" },
+      { int: "tenseDrums", label: "tense", min: 0, max: 1, step: 0.05, note: "drums that come with tension: their gain at full, when drum gain is 0" },
     ]},
   ];
   const PRESETS = [
@@ -216,7 +217,7 @@
   }
 
   function intCard(c) {
-    const card = el("div", "card", `<div class="hd"><b>${c.int}</b></div><div class="note">${c.note}</div>`);
+    const card = el("div", "card", `<div class="hd"><b>${c.label || c.int}</b></div><div class="note">${c.note}</div>`);
     card.append(slider("", c.min, c.max, c.step, () => spec[c.int], (v) => spec[c.int] = v));
     summary(card, () => fmt(spec[c.int]));
     return card;

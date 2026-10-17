@@ -42,7 +42,8 @@ Music parameters come from game state:
   `village` (the first with drums: a swung kick, clap and shaker under
   kalimba and pluck, building to a festival with level) or `rust`
   (industrial: detuned saws through swept resonant filters, a hiss bed, a
-  tritone, sinking as level rises).
+  tritone, sinking as level rises; under tension a broken beat with ratchets
+  comes in on an industrial kit).
   Moods are rows in a table (`engine/mood.go`, mirrored in
   `letgo/lg/ambience.lg`), so adding one is an entry in each
 - **level**: depth darkens, slows and thickens; elevation brightens

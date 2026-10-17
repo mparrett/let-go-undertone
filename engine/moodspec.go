@@ -29,6 +29,7 @@ type MoodSpec struct {
 	Grooves            []string
 	Drums, Busy        Line
 	Swing              float64
+	TenseDrums         float64 // drum gain at full tension for drums the level leaves silent
 }
 
 var palettes = map[string]Palette{
@@ -104,6 +105,7 @@ func MoodByName(name string) (MoodSpec, bool) {
 			Calm: m.calm, BellLift: m.bellLift,
 			Leads: slices.Clone(m.leads), Grooves: slices.Clone(m.grooves),
 			Drums: m.drums.export(), Busy: m.busy.export(), Swing: m.swing,
+			TenseDrums: m.tenseDrums,
 		}
 		for name, p := range palettes {
 			if reflect.DeepEqual(p, m.palette) {
@@ -148,6 +150,7 @@ func (s MoodSpec) Derive(seed uint64, level int, tension float64) (Params, error
 		bell: s.Bell.internal(), air: s.Air.internal(),
 		calm: s.Calm, bellLift: s.BellLift, palette: pal, leads: slices.Clone(s.Leads),
 		grooves: slices.Clone(s.Grooves), drums: s.Drums.internal(), busy: s.Busy.internal(), swing: s.Swing,
+		tenseDrums: s.TenseDrums,
 	}
 	return m.derive(seed, level, tension), nil
 }
@@ -202,6 +205,9 @@ func (s MoodSpec) EDN() string {
 	if len(s.Grooves) > 0 {
 		fmt.Fprintf(&b, "\n :grooves   %s\n :drums     %s\n :busy      %s\n :swing     %s",
 			kws(s.Grooves), ln(s.Drums), ln(s.Busy), num(s.Swing))
+		if s.TenseDrums > 0 {
+			fmt.Fprintf(&b, "\n :tense-drums %s", num(s.TenseDrums))
+		}
 	}
 	return b.String() + "}"
 }
