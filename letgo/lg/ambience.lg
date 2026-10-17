@@ -222,20 +222,17 @@
         v (if lo (max lo v) v)]
     (if hi (min hi v) v)))
 
-(defn derive-mood
-  "Derive with the mood named explicitly. This is the real entry point; the
-  signed-depth sugar below cannot reach every state. An unknown mood derives
-  as the dungeon."
-  [mood seed level tension]
-  (let [m (get moods mood (:dungeon moods))
-        mood (if (contains? moods mood) mood :dungeon)
-        l (double level)
+(defn derive-spec
+  "Derive from a mood entry itself rather than its name: a designer's export,
+  or any map in the shape of the table above. The result has no :mood, so the
+  host keeps its current patches unless the entry names a :palette."
+  [m seed level tension]
+  (let [l (double level)
         t (clamp01 tension)
         s (seed-state seed level)
         [s bpm-jitter] (draw-n s 5)
         [_ root-off]   (draw-pick s root-offsets)]
-    {:mood         mood
-     :seed         seed
+    {:seed         seed
      :bpm          (+ (line-at (:bpm m) l) (double bpm-jitter) (* 30.0 t))
      :root         (+ (:root-base m) (* (:root-step m) level) root-off)
      :scale        (scale-for (:scales m) level)
@@ -252,7 +249,16 @@
      :groove       (if (:grooves m) (pick-groove seed (:grooves m)) :none)
      :drum-gain    (if (:drums m) (line-at (:drums m) l) 0.0)
      :drum-busy    (if (:busy m) (line-at (:busy m) l) 0.0)
-     :swing        (get m :swing 0.0)}))
+     :swing        (get m :swing 0.0)
+     :palette      (get m :palette)}))
+
+(defn derive-mood
+  "Derive with the mood named explicitly. This is the real entry point; the
+  signed-depth sugar below cannot reach every state. An unknown mood derives
+  as the dungeon."
+  [mood seed level tension]
+  (let [mood (if (contains? moods mood) mood :dungeon)]
+    (assoc (derive-spec (get moods mood) seed level tension) :mood mood)))
 
 (defn derive-dungeon [seed depth tension] (derive-mood :dungeon seed depth tension))
 (defn derive-overworld [seed elevation tension] (derive-mood :overworld seed elevation tension))
@@ -270,6 +276,11 @@
   "Push parameters for an explicit mood at the engine."
   [mood seed level tension]
   (audio/set-parameters (derive-mood mood seed level tension)))
+
+(defn score-spec!
+  "Push parameters for a mood entry, such as one pasted from the designer."
+  [spec seed level tension]
+  (audio/set-parameters (derive-spec spec seed level tension)))
 
 (defn score!
   "Push the derived parameters at the engine. Applied at the next pattern

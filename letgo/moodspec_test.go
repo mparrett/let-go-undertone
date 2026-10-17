@@ -1,6 +1,8 @@
 package letgo
 
 import (
+	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/mparrett/undertone/engine"
@@ -20,5 +22,55 @@ func TestMoodSpecEDNMatchesLgTable(t *testing.T) {
 		if v.String() != "true" {
 			t.Errorf("%s: the export differs from ambience.lg's entry:\n%s", name, s.EDN())
 		}
+	}
+}
+
+// An export under a name the host has never seen still plays as designed:
+// derive-spec takes the entry itself, and its :palette picks the patches that
+// the host would otherwise pick by mood name.
+func TestDeriveSpecMatchesMoodSpec(t *testing.T) {
+	c, m := lgRuntime(t)
+	s, _ := engine.MoodByName("village")
+	s.Name, s.Palette = "cavern", "aurora"
+	s.BPM.Base -= 9
+	s.Grooves = engine.GrooveNames()[:2]
+	if err := c.Def("cavern-src", "{"+s.EDN()+"}"); err != nil {
+		t.Fatal(err)
+	}
+	for _, seed := range []uint64{1, 7, 42} {
+		for _, level := range []int{0, 3, 8} {
+			for _, tension := range []float64{0, 0.6} {
+				want, err := s.Derive(seed, level, tension)
+				if err != nil {
+					t.Fatal(err)
+				}
+				name := fmt.Sprintf("cavern/seed%d/level%d/tension%.1f", seed, level, tension)
+				m.params = engine.DeriveDungeon(1, 0, 0)
+				expr := fmt.Sprintf("(ambience/score-spec! (:cavern (read-string cavern-src)) %d %d %v)", seed, level, tension)
+				if _, err := c.Run(expr); err != nil {
+					t.Fatalf("%s: %v", name, err)
+				}
+				checkParams(t, name, m.params, want)
+			}
+		}
+	}
+}
+
+// A palette the host lacks is an error, as it is for MoodSpec.Derive, and
+// leaves the current patches alone; an export with none still reads back.
+func TestSpecPaletteMustExist(t *testing.T) {
+	c, m := lgRuntime(t)
+	m.params = engine.DeriveDungeon(1, 0, 0)
+	before := m.params.Palette
+	if _, err := c.Run("(audio/set-parameters {:palette :auroa :bpm 61})"); err == nil {
+		t.Error("an unknown :palette was accepted")
+	}
+	if m.params.BPM == 61 || !reflect.DeepEqual(m.params.Palette, before) {
+		t.Error("a rejected map still changed the music")
+	}
+	s, _ := engine.MoodByName("village")
+	s.Palette = ""
+	if _, err := c.Run("(get {" + s.EDN() + "} :village)"); err != nil {
+		t.Errorf("an export without a palette does not read: %v\n%s", err, s.EDN())
 	}
 }

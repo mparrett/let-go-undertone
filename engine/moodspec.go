@@ -60,6 +60,12 @@ func LeadNames() []string {
 // PaletteNames lists the patch banks a MoodSpec can name.
 func PaletteNames() []string { return []string{"dungeon", "overworld", "aurora"} }
 
+// PaletteByName returns a patch bank by the name a MoodSpec uses for it.
+func PaletteByName(name string) (Palette, bool) {
+	p, ok := palettes[name]
+	return p, ok
+}
+
 func (l Line) internal() line { return line{l.Base, l.Step, l.Lo, l.Hi} }
 
 // export converts a table line. A mood without drums leaves its drum lines
@@ -146,8 +152,9 @@ func (s MoodSpec) Derive(seed uint64, level int, tension float64) (Params, error
 }
 
 // EDN writes the spec as an entry for the moods map in letgo/lg/ambience.lg,
-// in that file's shape: a clamp appears only where it binds. :palette has no
-// lg counterpart yet (the host picks patches by mood name).
+// in that file's shape: a clamp appears only where it binds. The table's own
+// entries omit :palette, since the host picks their patches by mood name; an
+// entry passed to ambience/derive-spec needs it.
 func (s MoodSpec) EDN() string {
 	num := func(f float64) string {
 		t := fmt.Sprintf("%g", f)
@@ -186,7 +193,11 @@ func (s MoodSpec) EDN() string {
 	}{{"drone", s.Drone}, {"fifth", s.Fifth}, {"pad", s.Pad}, {"bell", s.Bell}, {"air", s.Air}} {
 		fmt.Fprintf(&b, " :%-9s %s\n", f.k, ln(f.l))
 	}
-	fmt.Fprintf(&b, " :calm      %d\n :bell-lift %d\n :palette   :%s\n :leads     %s", s.Calm, s.BellLift, s.Palette, kws(s.Leads))
+	fmt.Fprintf(&b, " :calm      %d\n :bell-lift %d\n", s.Calm, s.BellLift)
+	if s.Palette != "" { // a bare ":" would not read back
+		fmt.Fprintf(&b, " :palette   :%s\n", s.Palette)
+	}
+	fmt.Fprintf(&b, " :leads     %s", kws(s.Leads))
 	if len(s.Grooves) > 0 {
 		fmt.Fprintf(&b, "\n :grooves   %s\n :drums     %s\n :busy      %s\n :swing     %s",
 			kws(s.Grooves), ln(s.Drums), ln(s.Busy), num(s.Swing))
