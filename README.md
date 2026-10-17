@@ -24,6 +24,8 @@ The module has these parts:
 | `cmd/undertone` | A CLI that plays live, renders WAVs, and draws a four-band VU meter. |
 | [`examples/`](examples) | A step sequencer, the engine in a web page, and a let-go-driven game demo, each runnable in a browser. |
 
+[VISION.md](VISION.md) says what undertone is for and what it won't be.
+
 `cmd/lghost` is a minimal lg runner with the binding linked in, for trying the
 namespace without lgx.
 
