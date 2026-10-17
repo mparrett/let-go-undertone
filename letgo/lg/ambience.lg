@@ -269,6 +269,7 @@
      :bell-density (* (line-at (:bell m) l) (- 1.0 (* 0.5 t)))
      :air-gain     (+ (line-at (:air m) l) (* 0.1 t))
      :pulse-gain   t
+     :grit         t
      :fifth-offset (tense-offset (:calm m) t)
      :bell-lift    (:bell-lift m)
      :lead         (pick-lead seed (:leads m))

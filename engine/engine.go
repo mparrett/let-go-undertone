@@ -33,6 +33,8 @@ const (
 	opHpf          // p: cutoff Hz; pop x -> push highpassed x
 	opSvf          // p: cutoff Hz, resonance 0..1, mode (0 low, 1 band, 2 high), depth octaves; [pop m;] pop x -> push filtered x
 	opLfo          // p: rate Hz, shape (0 sine, 1 triangle, 2 sample-and-hold) -> push -1..1
+	opDrive        // p: drive, bias -1..1; pop x -> push tanh(drive*x + bias) - tanh(bias)
+	opCrush        // p: hold Hz, bits; pop x -> push x held and quantized
 )
 
 const (
@@ -69,6 +71,7 @@ type Voice struct {
 	gateRows int
 	units    []ustate
 	active   bool
+	grit     float64 // Params.Grit, kept current by apply: roughens drive, crush and svf
 
 	// gateSamples is the one-shot lane's gate clock (sfx.go). Sequencer
 	// voices gate in rows via step(); one-shots are off the grid, so their
@@ -247,7 +250,8 @@ func (v *Voice) run(l, r, delay *float64) {
 			// resonance 1 leaves k at 0.2, a Q of 5: it rings and whistles
 			// but never self-oscillates, so a voice still dies with its env,
 			// and the lowpass peak at the cutoff stays within 14 dB
-			g, k := s.k, 2-1.8*u.p[1]
+			res := u.p[1] + (1-u.p[1])*0.6*v.grit
+			g, k := s.k, 2-1.8*res
 			a1 := 1 / (1 + g*(g+k))
 			a2 := g * a1
 			x := stack[sp-1]
@@ -282,6 +286,32 @@ func (v *Voice) run(l, r, delay *float64) {
 			}
 			stack[sp] = x
 			sp++
+		case opDrive:
+			// Grit up to triples the drive, scaled back so a full-scale input
+			// peaks where it did at grit 0: grit squares the wave off rather
+			// than raising its peak. The bias makes the curve lopsided, for
+			// the even harmonics of an overdriven amp, and is subtracted
+			// back out so silence stays silent.
+			k := u.p[0] * (1 + 2*v.grit)
+			y := math.Tanh(k*stack[sp-1]+u.p[1]) - math.Tanh(u.p[1])
+			if v.grit > 0 {
+				y *= math.Tanh(u.p[0]) / math.Tanh(k)
+			}
+			stack[sp-1] = y
+		case opCrush:
+			// Sample-rate reduction then bit depth, both computed only when
+			// a new sample is held. Grit takes off up to four bits and
+			// lowers the hold rate by up to an octave and a half.
+			if !s.kset { // a new note holds its first sample at once
+				s.phase, s.kset = 1, true
+			}
+			s.phase += u.p[0] * math.Exp2(-1.5*v.grit) / SampleRate
+			if s.phase >= 1 {
+				s.phase -= math.Floor(s.phase)
+				q := math.Exp2(max(1, u.p[1]-4*v.grit) - 1)
+				s.lp = math.Round(stack[sp-1]*q) / q
+			}
+			stack[sp-1] = s.lp
 		case opPluck:
 			// Karplus-Strong: a noise burst circulating in a delay line
 			// the length of the period, averaged (lowpassed) each pass.
@@ -544,7 +574,8 @@ var air = Patch{
 
 // ---- the rust palette (industrial) ----
 // Resonant filters that move within a note, so the bed breathes and grinds
-// instead of sitting still.
+// instead of sitting still, and drive and crush for grit to work on: as
+// tension rises the saws overdrive, the hiss degrades and the pulse snarls.
 
 // rust: detuned saws through a resonant lowpass, each side swept by its own
 // slow lfo at a different rate, so the pair drifts in and out of phase
@@ -554,6 +585,7 @@ var rust = Patch{
 	{opMul, [4]float64{}},
 	{opLfo, [4]float64{0.07, 0}},
 	{opSvf, [4]float64{260, 0.75, 0, 1.2}},
+	{opDrive, [4]float64{1.5, 0.1}},
 	{opSend, [4]float64{0.15, 0, 0, 0}},
 	{opOut, [4]float64{0.45, 0.35}},
 	{opEnv, [4]float64{3, 2, 1, 4}},
@@ -561,6 +593,7 @@ var rust = Patch{
 	{opMul, [4]float64{}},
 	{opLfo, [4]float64{0.05, 1}},
 	{opSvf, [4]float64{260, 0.75, 0, 1.2}},
+	{opDrive, [4]float64{1.5, 0.1}},
 	{opSend, [4]float64{0.15, 0, 0, 0}},
 	{opOut, [4]float64{0.45, 0.65}},
 }
@@ -584,6 +617,7 @@ var hiss = Patch{
 	{opMul, [4]float64{}},
 	{opLfo, [4]float64{2.3, 2}},
 	{opSvf, [4]float64{1500, 0.7, 1, 1.3}},
+	{opCrush, [4]float64{11025, 10}},
 	{opSend, [4]float64{0.4, 0, 0, 0}},
 	{opOut, [4]float64{0.55, 0.5}},
 }
@@ -596,6 +630,7 @@ var grind = Patch{
 	{opMul, [4]float64{}},
 	{opEnv, [4]float64{0.001, 0.09, 0, 0.05}},
 	{opSvf, [4]float64{90, 0.8, 0, 4}},
+	{opDrive, [4]float64{2, 0.2}},
 	{opOut, [4]float64{0.8, 0.5}},
 }
 
@@ -625,6 +660,11 @@ type Params struct {
 	DrumGain float64 // scales every drum hit
 	DrumBusy float64 // 0..1: chance each ? step in the groove plays
 	Swing    float64 // 0..0.25: how far past halfway the off 16th lands
+
+	// Grit roughens the patches built to take it, 0..1: more drive, fewer
+	// bits, a lower hold rate, more resonance. Moods derive it from
+	// tension; patches without those units ignore it.
+	Grit float64
 
 	// Mute silences layers at the mix, for listening to a mood a layer at a
 	// time. A muted layer still plays, unheard, so the patterns and the rng
@@ -951,6 +991,11 @@ func (s *Synth) apply(p Params) {
 	s.cur.Store(&p)
 	s.samplesPerRow = int(SampleRate * 60 / (p.BPM * 2)) // 2 rows per beat: ambient rows are long
 	s.fitDelay(s.samplesPerRow * 3)
+	for _, vs := range [][]Voice{s.voices, s.dvoices[:], s.fx.shots[:]} {
+		for i := range vs {
+			vs[i].grit = p.Grit
+		}
+	}
 }
 
 // fitDelay keeps the delay three rows long as the tempo changes; set once,
@@ -1158,6 +1203,10 @@ func (p Params) sanitized() Params {
 		p.Swing = 0
 	}
 	p.Swing = min(p.Swing, 0.25)
+	if !(p.Grit >= 0) {
+		p.Grit = 0
+	}
+	p.Grit = min(p.Grit, 1)
 	return p
 }
 

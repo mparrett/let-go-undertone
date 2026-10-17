@@ -47,8 +47,10 @@ Music parameters come from game state:
   `letgo/lg/ambience.lg`), so adding one is an entry in each
 - **level**: depth darkens, slows and thickens; elevation brightens
 - **tension** (0..1): raises tempo, fades in a low pulse, slides the second
-  drone from fifth to tritone to minor ninth, thins the calm layers, and in a
-  mood with drums fills in the shaker and hits harder
+  drone from fifth to tritone to minor ninth, thins the calm layers, in a
+  mood with drums fills in the shaker and hits harder, and sets grit, which
+  overdrives and degrades the patches built for it (`rust`'s); a game can
+  also set `:grit` on its own
 - **seed**: picks from hand-tuned option tables, including the lead
   instrument (bell, chime, clang, kalimba, reed, or a Karplus-Strong pluck)
 

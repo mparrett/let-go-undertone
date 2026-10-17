@@ -20,6 +20,8 @@ floats, in the style of sointu and 4klang.
 | `lpf`, `hpf` | cutoff Hz | one-pole filter on the top |
 | `svf` | cutoff Hz, resonance, mode (0 low, 1 band, 2 high), depth octaves | filter the top; a nonzero depth first pops a modulation value |
 | `lfo` | rate Hz, shape (0 sine, 1 triangle, 2 sample-and-hold) | push -1..1 |
+| `drive` | drive, bias -1..1 | overdrive the top: `tanh(drive·x + bias) − tanh(bias)` |
+| `crush` | hold Hz, bits | sample-hold the top and round it to the bit depth |
 | `send` | amount | add the top to the delay bus |
 | `out` | gain, pan | pop and mix |
 
@@ -53,8 +55,9 @@ modulation input to other ops is the next step if a patch needs it.
 5, so a voice always dies with its envelope; a filter that sings on its own
 would need a voice that outlives its env.
 
-**Distortion only happens on the mix.** The final `tanh` is a safety limiter. No
-voice can be overdriven, folded, clipped, bit-reduced or sample-held on its own.
+**Distortion is a tanh.** `drive` overdrives a voice and `crush` degrades it,
+but there is no wavefolding or hard clipping, and the final `tanh` on the mix
+stays a safety limiter.
 
 **Noise is one color.** `osc noise` is white noise from an LCG. Pink, brown and
 crackle (sparse impulses) all need a filter or a new source.
@@ -80,7 +83,7 @@ us:
 |---|---|---|
 | modulation | `send` to any parameter of any unit, `oscillator` with `lfo`, `loadval` | `lfo` or `env` into `svf` cutoff |
 | resonant filtering | `filter` (state-variable: frequency, resonance, low/band/high) | `svf` |
-| grit | `distort` (drive), `hold` (sample-rate reduction), `crush` (bit depth), `clip` | mix `tanh` only |
+| grit | `distort` (drive), `hold` (sample-rate reduction), `crush` (bit depth), `clip` | `drive`, `crush` |
 | space | `delay` (feedback, damp, note tracking, many taps, reverb by combs) | one delay bus |
 | richer sources | `oscillator` color, shape, detune, unison; `noise` shape | four shapes |
 | dynamics | `compressor`, `belleq` | none |
@@ -103,10 +106,12 @@ modulation, resonant filtering and grit cover most of the gap.
 
 ## Additions
 
-`svf` and `lfo` are in, with the `rust` mood as their first user: resonant
-saws swept by slow lfos, a sample-and-hold noise bed and a filter-envelope
-pulse. The rest are candidates. Each keeps the VM's shape: data patches, a fixed stack, no allocation on the
-audio thread, and validation that `ShotSpec` and the fuzz test can extend.
+`svf`, `lfo`, `drive` and `crush` are in, with the `rust` mood as their first
+user: resonant saws swept by slow lfos and overdriven, a sample-and-hold noise
+bed through a crusher, and a driven filter-envelope pulse. The rest are
+candidates. Each keeps the VM's shape: data patches, a fixed stack, no
+allocation on the audio thread, and validation that `ShotSpec` and the fuzz
+test can extend.
 
 1. **`svf`: a state-variable filter** (done). Cutoff, resonance, mode (low, band,
    high) and a modulation depth in octaves, which fills the unit's four
@@ -117,8 +122,8 @@ audio thread, and validation that `ShotSpec` and the fuzz test can extend.
 2. **`lfo`: a slow source** (done, in Hz; rows would keep it on the grid). Shape
    sine, triangle or sample-and-hold. It pushes a value in -1..1. Random steps
    from sample-and-hold are a staple of the industrial sound.
-3. **`drive`: a waveshaper.** `tanh(k·x)` with a bias for even harmonics.
-4. **`crush`: hold and bit depth.** Two parameters, cheap.
+3. **`drive`: a waveshaper** (done). `tanh(k·x)` with a bias for even harmonics.
+4. **`crush`: hold and bit depth** (done). Mid-tread, so silence stays silent.
 5. **A reverb bus** beside the delay: a damped Schroeder/Freeverb-style network
    first, a Dattorro plate if that falls short. It is the largest of these
    additions and the one most likely to show up in a wasm profile.
@@ -134,13 +139,17 @@ other moods byte-identical.
 ## Fitting the knobs
 
 Patches stay fixed tables; the knobs scale them at run time, as `v.gain` already
-scales every `out` and `send`. Two voice-level scalars would cover most of the
-industrial range:
+scales every `out` and `send`.
 
-- **grit**, driven by tension: scales `drive`, `crush` and `svf` resonance, and
-  the level of noise layers. A calm mood with no gritty units ignores it.
-- **open**, driven by level: scales `svf` cutoff, so a rising level opens the
-  filters instead of only adding layers.
+**Grit** (`Params.Grit`, `:grit`) is in. Moods derive it from tension, and a
+game can set it on its own. From 0 to 1 it triples `drive`, scaled back so a
+full-scale input peaks where it did; it takes four bits off `crush` and lowers
+its hold rate by an octave and a half; and it moves `svf` resonance 60% of the
+way to its maximum. Patches without those units ignore it, so the other moods
+render as before.
+
+**Open** is the next candidate: driven by level, it would scale `svf` cutoff,
+so a rising level opens the filters instead of only adding layers.
 
 An industrial mood is then a palette that uses the new ops and a set of lines
 like any other mood. The tension story stays the same and only sounds harsher.

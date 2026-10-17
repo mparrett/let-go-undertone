@@ -29,6 +29,8 @@ type ShotSpec struct {
 //	svf   cutoff Hz, resonance 0..1, mode 0 low 1 band 2 high, depth octaves
 //	      -> filter the top; a nonzero depth first pops a modulation value
 //	lfo   rate Hz, shape 0 sine 1 triangle 2 sample-and-hold -> push -1..1
+//	drive drive, bias -1..1                           overdrive the top
+//	crush hold Hz, bits                               sample-hold and quantize the top
 //	send  amount                                      add the top to the delay bus
 //	out   gain, pan 0..1                              pop and mix
 type UnitSpec struct {
@@ -37,11 +39,11 @@ type UnitSpec struct {
 	Args  []float64
 }
 
-var opNames = []string{opEnv: "env", opOsc: "osc", opMul: "mul", opLpf: "lpf", opSend: "send", opOut: "out", opPluck: "pluck", opHpf: "hpf", opSvf: "svf", opLfo: "lfo"}
+var opNames = []string{opEnv: "env", opOsc: "osc", opMul: "mul", opLpf: "lpf", opSend: "send", opOut: "out", opPluck: "pluck", opHpf: "hpf", opSvf: "svf", opLfo: "lfo", opDrive: "drive", opCrush: "crush"}
 
 // opArgs is how many Args a unit of each op takes: the parameters its op
 // reads, less an osc's shape, which travels in UnitSpec.Shape.
-var opArgs = []int{opEnv: 4, opOsc: 3, opMul: 0, opLpf: 1, opSend: 1, opOut: 2, opPluck: 2, opHpf: 1, opSvf: 4, opLfo: 2}
+var opArgs = []int{opEnv: 4, opOsc: 3, opMul: 0, opLpf: 1, opSend: 1, opOut: 2, opPluck: 2, opHpf: 1, opSvf: 4, opLfo: 2, opDrive: 2, opCrush: 2}
 
 var shapeNames = []string{shpSine: "sine", shpSaw: "saw", shpPulse: "pulse", shpNoise: "noise"}
 
@@ -138,7 +140,7 @@ func (s ShotSpec) patch() (Patch, error) {
 		switch u.op {
 		case opMul:
 			need = 2
-		case opOut, opLpf, opHpf, opSend:
+		case opOut, opLpf, opHpf, opSend, opDrive, opCrush:
 			need = 1
 		case opSvf:
 			need = 1
@@ -237,6 +239,12 @@ func (us UnitSpec) unit() (Unit, error) {
 	case opLfo:
 		ok = a[0] > 0 && a[0] <= 100 && whole(a[1], 2)
 		rule = "a rate above 0 and at most 100 Hz, shape 0, 1 or 2"
+	case opDrive:
+		ok = a[0] >= 0.1 && a[0] <= 20 && math.Abs(a[1]) <= 1
+		rule = "drive 0.1..20, bias -1..1"
+	case opCrush:
+		ok = a[0] >= 50 && a[0] <= SampleRate && a[1] >= 1 && a[1] <= 16
+		rule = fmt.Sprintf("hold 50..%d Hz, bits 1..16", SampleRate)
 	case opSend:
 		ok = a[0] >= 0 && a[0] <= 1
 		rule = "an amount 0..1"
