@@ -110,8 +110,8 @@
   <div class="ctl">
    <div class="lab">START FROM</div>
    <div class="bar" id="moods"></div>
-   <label class="switch" id="buildup" style="margin-left:0;display:inline-flex" title="a mood starts with only the drone; bring layers in from the mix">
-    <input type="checkbox"> build up: start with the drone alone</label>
+   <label class="switch" id="buildup" style="margin-left:0;display:inline-flex" title="a mood starts with only its lowest layer; bring the rest in from the mix">
+    <input type="checkbox"> build up: start with one layer</label>
    <details class="aud">
     <summary><b>AUDITION</b><span id="audsum"></span></summary>
     <div class="lab">PRESETS <small style="font-weight:400;letter-spacing:0">· each sets level and tension</small></div>
@@ -395,12 +395,17 @@
     spec.grooves = spec.grooves || [];
     stashedGrooves = null; grooveCopies = {};
     for (const b of document.querySelectorAll("#moods .chip")) b.classList.toggle("on", b.dataset.v === name);
-    if ($("buildup").querySelector("input").checked) setMuted(LAYERS.filter((l) => l !== "drone"));
+    if ($("buildup").querySelector("input").checked) {
+      // Start from the lowest layer the mood has at this level: aurora has no drone.
+      const level = +$("level").value;
+      const first = ["drone", "fifth", "pad", "bell", "air"].find((k) => lineAt(spec[k], level) > 0.01) || "drone";
+      setMuted(LAYERS.filter((l) => l !== layerOf(first)));
+    }
     sync(); changed();
   }
 
   // The mix: a chip per layer, lit while you hear it. "none" and then one
-  // layer is a solo; build up starts every mood that way from the drone.
+  // layer is a solo; build up starts every mood that way from its lowest layer.
   function setMuted(layers) {
     muted.clear(); for (const l of layers) muted.add(l);
     for (const b of document.querySelectorAll("#mix .chip")) b.classList.toggle("on", !muted.has(b.dataset.v));

@@ -116,26 +116,10 @@ func (j specJSON) spec() engine.MoodSpec {
 
 var noteNames = []string{"C", "C♯", "D", "E♭", "E", "F", "F♯", "G", "A♭", "A", "B♭", "B"}
 
-// layerGain is the parameter that silences a layer the page can mute; the
-// lead is the bell, and pulse is tension's own layer.
-func layerGain(p *engine.Params, layer string) *float64 {
-	switch layer {
-	case "drone":
-		return &p.DroneGain
-	case "fifth":
-		return &p.FifthGain
-	case "pad":
-		return &p.PadDensity
-	case "lead":
-		return &p.BellDensity
-	case "air":
-		return &p.AirGain
-	case "pulse":
-		return &p.PulseGain
-	case "drums":
-		return &p.DrumGain
-	}
-	return nil
+// layers are the names the page mutes by; pulse is tension's own layer.
+var layers = map[string]engine.Layers{
+	"drone": engine.LayerDrone, "fifth": engine.LayerFifth, "pad": engine.LayerPad, "lead": engine.LayerLead,
+	"air": engine.LayerAir, "pulse": engine.LayerPulse, "drums": engine.LayerDrums,
 }
 
 func marshal(v any) string {
@@ -191,15 +175,13 @@ func main() {
 			if err != nil {
 				return marshal(map[string]string{"error": err.Error()})
 			}
-			// Muting is the designer's, not the spec's: it zeroes what was
-			// derived, tension's additions included, and never reaches the EDN.
+			// Muting is the designer's, not the spec's, so it never reaches
+			// the EDN; the engine silences the layers at the mix.
 			if len(a) > 4 {
 				var muted []string
 				_ = json.Unmarshal([]byte(a[4].String()), &muted)
 				for _, l := range muted {
-					if g := layerGain(&p, l); g != nil {
-						*g = 0
-					}
+					p.Mute |= layers[l]
 				}
 			}
 			syn.SetParametersNow(p)
