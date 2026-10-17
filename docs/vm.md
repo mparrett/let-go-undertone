@@ -24,6 +24,8 @@ floats, in the style of sointu and 4klang.
 | `crush` | hold Hz, bits | sample-hold the top and round it to the bit depth |
 | `send` | amount | add the top to the delay bus |
 | `verb` | amount | add the top to the reverb bus |
+| `scale` | gain, offset | top = top·gain + offset: an `lfo` made into a range |
+| `pitch` | depth semis | pop m; bend every later `osc` by m·depth semitones |
 | `out` | gain, pan | pop and mix |
 
 In a `ShotSpec`, an `osc` names its shape in `Shape`, and `Args` holds the
@@ -49,10 +51,10 @@ thins the pad and lead, and drives the drums.
 
 ## Limits
 
-**Only the svf's cutoff moves within a note.** An `lfo` or `env` can sweep an
-`svf`, and the oscillator has its pitch sweep. Nothing else is modulated: no
-pitch vibrato, no level tremolo, no pulse width. Generalizing the svf's
-modulation input to other ops is the next step if a patch needs it.
+**Modulation reaches cutoff, pitch and level, not timbre.** An `lfo` or `env`
+can sweep an `svf`; `pitch` bends the oscillators after it, for vibrato and
+drift; `scale` turns a modulator into a range that `mul` applies as tremolo.
+Pulse width, drive and the delay and reverb sends cannot be modulated yet.
 
 **Resonance stops short of self-oscillation.** The `svf` tops out at a Q of
 5, so a voice always dies with its envelope; a filter that sings on its own
