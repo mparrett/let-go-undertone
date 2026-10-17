@@ -36,9 +36,9 @@ type UnitSpec struct {
 
 var opNames = []string{opEnv: "env", opOsc: "osc", opMul: "mul", opLpf: "lpf", opSend: "send", opOut: "out", opPluck: "pluck", opHpf: "hpf"}
 
-// opArity is how many of a unit's four parameters its op reads. An osc reads
-// four, but its shape travels in UnitSpec.Shape, so its Args hold three.
-var opArity = []int{opEnv: 4, opOsc: 4, opMul: 0, opLpf: 1, opSend: 1, opOut: 2, opPluck: 2, opHpf: 1}
+// opArgs is how many Args a unit of each op takes: the parameters its op
+// reads, less an osc's shape, which travels in UnitSpec.Shape.
+var opArgs = []int{opEnv: 4, opOsc: 3, opMul: 0, opLpf: 1, opSend: 1, opOut: 2, opPluck: 2, opHpf: 1}
 
 var shapeNames = []string{shpSine: "sine", shpSaw: "saw", shpPulse: "pulse", shpNoise: "noise"}
 
@@ -82,7 +82,7 @@ func ShotByName(name string) (ShotSpec, bool) {
 	}
 	s := ShotSpec{Name: name, GateMS: d.gateMS, Units: make([]UnitSpec, len(d.patch))}
 	for i, u := range d.patch {
-		us := UnitSpec{Op: opNames[u.op], Args: append([]float64(nil), u.p[:opArity[u.op]]...)}
+		us := UnitSpec{Op: opNames[u.op], Args: append([]float64(nil), u.p[:opArgs[u.op]]...)}
 		if u.op == opOsc {
 			us.Shape = shapeNames[int(u.p[1])]
 			us.Args = []float64{u.p[0], u.p[2], u.p[3]}
@@ -109,8 +109,8 @@ func RegisterShot(s ShotSpec) error {
 
 // patch checks the spec and builds its patch.
 func (s ShotSpec) patch() (Patch, error) {
-	if s.Name == "" {
-		return nil, fmt.Errorf("a shot needs a name")
+	if !validName(s.Name) {
+		return nil, fmt.Errorf("a shot needs a name of letters, digits and dashes, as a keyword")
 	}
 	if _, ok := shotLib[s.Name]; ok {
 		return nil, fmt.Errorf("a built-in shot has that name")
@@ -158,6 +158,16 @@ func (s ShotSpec) patch() (Patch, error) {
 	return p, nil
 }
 
+// validName keeps a name one EDN reads back as a keyword.
+func validName(n string) bool {
+	for i, c := range n {
+		if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c == '-' || c == '_' || i > 0 && c >= '0' && c <= '9') {
+			return false
+		}
+	}
+	return n != ""
+}
+
 func b2i(b bool) int {
 	if b {
 		return 1
@@ -171,12 +181,8 @@ func (us UnitSpec) unit() (Unit, error) {
 	if op < 0 {
 		return Unit{}, fmt.Errorf("unknown op %q", us.Op)
 	}
-	want := opArity[op]
-	if op == opOsc {
-		want = 3
-	}
-	if len(us.Args) != want {
-		return Unit{}, fmt.Errorf("%d args, want %d", len(us.Args), want)
+	if want := opArgs[op]; len(us.Args) != want {
+		return Unit{}, fmt.Errorf("%d args, want %d", len(us.Args), opArgs[op])
 	}
 	for _, a := range us.Args {
 		if math.IsNaN(a) || math.IsInf(a, 0) {
@@ -191,10 +197,12 @@ func (us UnitSpec) unit() (Unit, error) {
 	case opEnv:
 		// Decay and release divide each step by their length in samples;
 		// under a sample, a step overshoots and the envelope blows up.
-		// Attack is offset by a sample, so any length is stable. The 10 s
-		// ceiling bounds how long a shot can keep a voice from the others.
-		ok = a[0] >= 0 && a[0] <= 10 && a[1] >= 0.001 && a[1] <= 10 && a[2] >= 0 && a[2] <= 1 && a[3] >= 0.001 && a[3] <= 10
-		rule = "attack 0..10 s, decay and release 0.001..10 s, sustain 0..1"
+		// Attack is offset by a sample, so any length is stable. A voice
+		// lives until its gate closes and then until the release has fallen
+		// to 1e-4, about 9.2 releases, so the gate's 10 s and a 2 s release
+		// keep a shot from holding a voice past about half a minute.
+		ok = a[0] >= 0 && a[0] <= 10 && a[1] >= 0.001 && a[1] <= 10 && a[2] >= 0 && a[2] <= 1 && a[3] >= 0.001 && a[3] <= 2
+		rule = "attack 0..10 s, decay 0.001..10 s, release 0.001..2 s, sustain 0..1"
 	case opOsc:
 		sh := indexOf(shapeNames, us.Shape)
 		if sh < 0 {
@@ -204,8 +212,10 @@ func (us UnitSpec) unit() (Unit, error) {
 		ok = math.Abs(a[0]) <= 48 && math.Abs(a[1]) <= 48 && a[2] >= 0
 		rule = "transpose and sweep within 48 semitones, sweep decay >= 0"
 	case opPluck:
-		ok = math.Abs(a[0]) <= 48 && a[1] >= 0 && a[1] < 1
-		rule = "transpose within 48 semitones, feedback 0 to under 1"
+		// the string's delay line is a period long, allocated on the audio
+		// thread at the first note, so how far down it may go is bounded
+		ok = math.Abs(a[0]) <= 24 && a[1] >= 0 && a[1] < 1
+		rule = "transpose within 24 semitones, feedback 0 to under 1"
 	case opLpf, opHpf:
 		ok = a[0] > 0 && a[0] <= SampleRate/2
 		rule = fmt.Sprintf("a cutoff above 0 and at most %d Hz", SampleRate/2)

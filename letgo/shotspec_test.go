@@ -48,8 +48,14 @@ func TestRegisterShotFromLg(t *testing.T) {
 		t.Error("a shot registered from lg plays differently from the built-in it copies")
 	}
 
-	if _, err := c.Run(`(audio/register-shot {:name :bad :gate-ms 10 :patch [[:env 0 0.1 0 0.1] [:mul] [:out 1 0.5]]})`); err == nil ||
-		!strings.Contains(err.Error(), "run dry") {
-		t.Errorf("a patch that underflows the stack: got %v, want an error", err)
+	for _, c2 := range []struct{ patch, says string }{
+		{"[[:env 0 0.1 0 0.1] [:mul] [:out 1 0.5]]", "run dry"},
+		{"[[:env :sine 0 0.1 0 0.1] [:osc 0 :sine 0 1] [:mul] [:out 1 0.5]]", "only an osc"},
+		{"[[:env 0 0.1 0 0.1] [:osc 0 :sine :saw 0 1] [:mul] [:out 1 0.5]]", "only an osc"},
+	} {
+		_, err := c.Run(`(audio/register-shot {:name :bad :gate-ms 10 :patch ` + c2.patch + `})`)
+		if err == nil || !strings.Contains(err.Error(), c2.says) {
+			t.Errorf("%s: got %v, want an error saying %q", c2.patch, err, c2.says)
+		}
 	}
 }

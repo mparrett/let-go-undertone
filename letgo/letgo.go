@@ -336,13 +336,17 @@ func shotSpec(v vm.Value) (engine.ShotSpec, error) {
 		if k, ok := u[0].(vm.Keyword); ok {
 			us.Op = string(k)
 		}
-		for _, x := range u[1:] {
+		for j, x := range u[1:] {
 			switch x := x.(type) {
 			case vm.Float:
 				us.Args = append(us.Args, float64(x))
 			case vm.Int:
 				us.Args = append(us.Args, float64(x))
 			case vm.Keyword:
+				// an osc names its shape second: [:osc transpose :sine sweep decay]
+				if us.Op != "osc" || j != 1 {
+					return s, fmt.Errorf("unit %d: %s at %d; only an osc names a shape, second", i, x, j+1)
+				}
 				us.Shape = string(x)
 			default:
 				return s, fmt.Errorf("unit %d: %s is not a number or a shape", i, x.Type().Name())

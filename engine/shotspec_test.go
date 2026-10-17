@@ -59,6 +59,9 @@ func TestRegisterShotRefusesUnsafePatches(t *testing.T) {
 	}{
 		{"a built-in's name", ShotSpec{Name: "hit", Units: ok}, "built-in"},
 		{"no name", ShotSpec{Units: ok}, "name"},
+		{"a name EDN cannot read back", ShotSpec{Name: "big hit", GateMS: 10, Units: ok}, "name"},
+		{"a release of a minute", ShotSpec{Name: "x", GateMS: 10, Units: with(0, UnitSpec{Op: "env", Args: []float64{0, 0.1, 0, 60}})}, "release"},
+		{"a pluck four octaves down", ShotSpec{Name: "x", GateMS: 10, Units: with(1, UnitSpec{Op: "pluck", Args: []float64{-48, 0.9}})}, "transpose"},
 		{"an unknown op", ShotSpec{Name: "x", GateMS: 10, Units: with(2, UnitSpec{Op: "add"})}, "unknown op"},
 		{"an unknown shape", ShotSpec{Name: "x", GateMS: 10, Units: with(1, UnitSpec{Op: "osc", Shape: "square", Args: []float64{0, 0, 1}})}, "shape"},
 		{"too few args", ShotSpec{Name: "x", GateMS: 10, Units: with(3, UnitSpec{Op: "out", Args: []float64{0.5}})}, "args"},
@@ -112,10 +115,7 @@ func TestAcceptedShotsAreSafe(t *testing.T) {
 		// patch-shaped chains (env, source, mul, filters, out) with random
 		// parameters, so that some pass and the edges of each range are hit
 		unit := func(op string) UnitSpec {
-			k := opArity[indexOf(opNames, op)]
-			if op == "osc" {
-				k = 3
-			}
+			k := opArgs[indexOf(opNames, op)]
 			u := UnitSpec{Op: op, Shape: shapeNames[r.n(len(shapeNames))]}
 			for a := 0; a < k; a++ {
 				u.Args = append(u.Args, arg())
