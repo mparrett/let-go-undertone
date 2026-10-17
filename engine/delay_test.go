@@ -24,3 +24,28 @@ func TestDelayFollowsTheTempo(t *testing.T) {
 		}
 	}
 }
+
+// Resizing keeps the echoes due soonest in reading order, so playback does
+// not jump, and a regrown line follows them with silence, not stale echoes.
+func TestDelayResizeKeepsTheNextEchoes(t *testing.T) {
+	s := NewSynth(DeriveDungeon(1, 0, 0))
+	n := len(s.dl)
+	for i := range s.dl {
+		s.dl[i], s.dr[i] = float64(i+1), -float64(i+1)
+	}
+	s.dpos = n - 10 // ten echoes before the ring wraps
+	s.fitDelay(n / 2)
+	if s.dpos != 0 || s.dl[0] != float64(n-9) || s.dl[9] != float64(n) || s.dl[10] != 1 || s.dr[10] != -1 {
+		t.Fatalf("after shrinking, the line reads %v %v %v from %d; want the ring's next echoes in order",
+			s.dl[0], s.dl[9], s.dl[10], s.dpos)
+	}
+	s.fitDelay(n) // regrow into the same buffer
+	if s.dl[n/2-1] != float64(n/2-10) {
+		t.Errorf("regrowing changed the kept echoes: %v", s.dl[n/2-1])
+	}
+	for i := n / 2; i < n; i++ {
+		if s.dl[i] != 0 || s.dr[i] != 0 {
+			t.Fatalf("sample %d of the regrown line holds a stale echo %v", i, s.dl[i])
+		}
+	}
+}
