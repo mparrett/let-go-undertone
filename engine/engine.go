@@ -497,7 +497,26 @@ type Params struct {
 	DrumGain float64 // scales every drum hit
 	DrumBusy float64 // 0..1: chance each ? step in the groove plays
 	Swing    float64 // 0..0.25: how far past halfway the off 16th lands
+
+	// Mute silences layers at the mix, for listening to a mood a layer at a
+	// time. A muted layer still plays, unheard, so the patterns and the rng
+	// draws are those of the full mix; zeroing a density or gain instead would
+	// change what every other layer plays.
+	Mute Layers
 }
+
+// Layers is a set of the music's layers, one bit each.
+type Layers uint8
+
+const (
+	LayerDrone Layers = 1 << iota // the tracks, in track order
+	LayerFifth
+	LayerPad
+	LayerLead
+	LayerAir
+	LayerPulse
+	LayerDrums
+)
 
 // leadDef is one entry in the lead-instrument library.
 type leadDef struct {
@@ -848,12 +867,23 @@ func (s *Synth) frame() (int16, int16) {
 	s.nframe++
 	var l, r float64
 	s.dbus = 0
+	var ml, mr, mbus float64 // where a muted layer plays
 	for i := range s.voices {
 		if s.voices[i].active {
-			s.voices[i].run(&l, &r, &s.dbus)
+			if s.params.Mute&(1<<i) != 0 {
+				s.voices[i].run(&ml, &mr, &mbus)
+			} else {
+				s.voices[i].run(&l, &r, &s.dbus)
+			}
 		}
 	}
-	s.runDrums(&l, &r)
+	if s.params.Mute&LayerDrums != 0 {
+		bus := s.dbus
+		s.runDrums(&ml, &mr)
+		s.dbus = bus
+	} else {
+		s.runDrums(&l, &r)
+	}
 	if g := math.Float64frombits(s.musicGain.Load()); g != 1 {
 		l, r, s.dbus = l*g, r*g, s.dbus*g
 	}
