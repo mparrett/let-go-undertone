@@ -194,8 +194,9 @@ func main() {
 }
 ```
 
-Run the program with this binary in place of `lg`. Put `letgo/lg` on
-`-source-paths` if it uses `ambience`. To keep one codebase that also runs on a
+Run the program with this binary in place of `lg`. The import also registers
+`undertone.ambience`, so a program that uses it requires
+`[undertone.ambience :as ambience]` with no source path. To keep one codebase that also runs on a
 stock `lg`, where there is no `audio` namespace, look the natives up at runtime:
 `(resolve 'audio/trigger)` is nil there.
 

@@ -15,9 +15,9 @@ type Source struct {
 	Text string
 }
 
-// Sources lists the namespaces in dependency order — load-string does not
-// consult the resolver for already-registered namespaces' requires to work,
-// it just needs each dependency registered before its dependents load.
+// Sources lists the namespaces package letgo registers at init. Order does
+// not matter: each loads through the resolver on first require, which
+// follows its own :require forms.
 var Sources = []Source{
 	{"undertone.ambience", ambience},
 }
