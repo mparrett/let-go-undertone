@@ -309,7 +309,7 @@ type output interface {
 	Resume()
 }
 
-// ---- lg map readers ----
+// lg map readers.
 // Absent keys leave the target untouched; that is the partial-merge contract.
 
 func at(m *vm.PersistentMap, k string) vm.Value {
