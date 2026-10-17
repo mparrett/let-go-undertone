@@ -21,6 +21,9 @@ floats, in the style of sointu and 4klang.
 | `send` | amount | add the top to the delay bus |
 | `out` | gain, pan | pop and mix |
 
+In a `ShotSpec`, an `osc` names its shape in `Shape`, and `Args` holds the
+other three.
+
 Layering needs no add op: each `env → osc → mul → out` chain mixes on its own,
 so a patch with two such chains is two detuned layers (`drone`, `pad`).
 
@@ -61,9 +64,10 @@ damping. Its length is set from the tempo at the first `apply` and never
 changes, so once tension raises the tempo it no longer lands on the grid. There
 is no reverb.
 
-**The sequencer is a 16-row grid.** Drums have swing and probability steps;
-the melodic tracks fire on rows only. There are no ratchets, polymeters,
-off-grid hits, or patterns longer than a bar.
+**The sequencer is a fixed grid.** A pattern is 16 rows at two rows per beat,
+so two bars. Drums play 16th notes within it, with swing and probability steps;
+the melodic tracks fire on rows only. There are no ratchets, polymeters or
+off-grid hits, and every pattern is the same length.
 
 **Patches are code.** Built-in patches are Go tables. A game can add one-shots
 through `ShotSpec` (validated, fuzzed), but a mood's palette can only use
@@ -105,10 +109,11 @@ Each keeps the VM's shape: data patches, a fixed stack, no allocation on the
 audio thread, and validation that `ShotSpec` and the fuzz test can extend.
 
 1. **`svf`: a state-variable filter.** Cutoff, resonance, mode (low, band,
-   high), in the trapezoidal form from Zavalishin and Simper below, which stays
-   stable under fast cutoff changes. It takes a modulation input from the
-   stack: it pops a value `m` and runs at `cutoff × 2^(m × depth)` octaves, so
-   an `env` or `lfo` pushed before it becomes a filter envelope or a sweep.
+   high) and a modulation depth in octaves, which fills the unit's four
+   parameters. It uses the trapezoidal form from Zavalishin and Simper below,
+   which stays stable under fast cutoff changes. With a nonzero depth it pops a
+   value `m` from the stack and runs at `cutoff × 2^(m × depth)` Hz, so an `env`
+   or `lfo` pushed before it becomes a filter envelope or a sweep.
 2. **`lfo`: a slow source.** Rate in Hz (or rows, to stay on the grid), shape
    sine, triangle or sample-and-hold. It pushes a value in -1..1. Random steps
    from sample-and-hold are a staple of the industrial sound.
