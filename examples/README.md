@@ -10,8 +10,8 @@ AudioWorklet in a secure context; tap to start audio.
 |---|---|---|
 | [`grid/`](grid) | A step sequencer on the engine: lead, bass, pulse and drum lanes over the generated bed, in any of its moods (village, aurora, meadow, overworld, ruins, dungeon). A link carries the pattern. Built with `-tags lg`, it adds a mutate button whose variations are lg code ([`grid/lgmutate/mutate.lg`](grid/lgmutate/mutate.lg)). | ~5 MB; ~28 MB with lg |
 | [`player/`](player) | The engine alone, generative, with a four-band meter and query-string controls (`?depth=4&tension=0.6&seed=7&lead=pluck`). | ~3 MB |
-| [`designer/`](designer) | A mood designer: start from a built-in mood, shape its tempo, key, layers and drums, and hear each change as you make it at any level and tension. A mix mutes layers one at a time, and the mood exports as an EDN entry that `ambience/derive-spec` plays. | ~5 MB |
 | [`descent/`](descent) | let-go driving the engine: lg code derives music parameters and sound-effect triggers from a scripted descent-and-fight, natively (`cli/`) and in the browser (`web/`). | ~29 MB |
+| [`designer/`](designer) | A mood designer: start from a built-in mood, shape its tempo, key, layers and drums, and hear each change as you make it at any level and tension. A mix mutes layers one at a time, and the mood exports as an EDN entry that `ambience/derive-spec` plays. | ~5 MB |
 
 The descent demo's size is let-go's runtime; the engine is a few MB of it.
 Served compressed it is about 4.4 MB with brotli.
