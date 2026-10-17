@@ -2,6 +2,7 @@ package letgo
 
 import (
 	"fmt"
+	"math"
 	"reflect"
 	"testing"
 
@@ -72,5 +73,28 @@ func TestSpecPaletteMustExist(t *testing.T) {
 	s.Palette = ""
 	if _, err := c.Run("(get {" + s.EDN() + "} :village)"); err != nil {
 		t.Errorf("an export without a palette does not read: %v\n%s", err, s.EDN())
+	}
+}
+
+// Drums at zero gain stay silent under tension in lg as in Go: both turn the
+// tension term on only for drums that are playing.
+func TestDeriveSpecLeavesSilentDrumsSilent(t *testing.T) {
+	c, m := lgRuntime(t)
+	s, _ := engine.MoodByName("village")
+	s.Name = "hush"
+	s.Drums = engine.Line{Base: 0, Step: 0, Lo: math.Inf(-1), Hi: math.Inf(1)}
+	if err := c.Def("hush-src", "{"+s.EDN()+"}"); err != nil {
+		t.Fatal(err)
+	}
+	for _, level := range []int{0, 3} {
+		want, _ := s.Derive(7, level, 1)
+		m.params = engine.DeriveDungeon(1, 0, 0)
+		if _, err := c.Run(fmt.Sprintf("(ambience/score-spec! (:hush (read-string hush-src)) 7 %d 1.0)", level)); err != nil {
+			t.Fatal(err)
+		}
+		checkParams(t, fmt.Sprintf("hush/level%d", level), m.params, want)
+		if m.params.DrumGain != 0 {
+			t.Errorf("level %d: silent drums play at %v", level, m.params.DrumGain)
+		}
 	}
 }

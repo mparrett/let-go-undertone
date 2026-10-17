@@ -23,7 +23,7 @@ var drumKit = [nDrums]struct {
 // step is a velocity or a chance:
 //
 //	X accent   x hit   o ghost   . rest
-//	? a hit with probability DrumBusy (level fills the shaker in)
+//	? a hit with probability DrumBusy (level and tension fill the shaker in)
 //	f a fill hit with probability 0.15 + 0.6*tension
 type groove [nDrums]string
 

@@ -136,7 +136,8 @@
 ;; space and how it moves with level. Each line is base + step*level, clamped
 ;; by :lo/:hi where present. Tension works the same in every mood, so it is not
 ;; in the table: tempo up, a low pulse fading in, the harmony souring, the calm
-;; layers thinning. tension 0 reproduces the pre-tension output exactly: it
+;; layers thinning, and in a mood with drums the shaker filling in and the hits
+;; landing harder. tension 0 reproduces the pre-tension output exactly: it
 ;; takes no extra rng draws. Mirrors engine/mood.go; the parity test holds the
 ;; two to the same bits.
 
@@ -231,7 +232,13 @@
         t (clamp01 tension)
         s (seed-state seed level)
         [s bpm-jitter] (draw-n s 5)
-        [_ root-off]   (draw-pick s root-offsets)]
+        [_ root-off]   (draw-pick s root-offsets)
+        dg (if (:drums m) (line-at (:drums m) l) 0.0)
+        db (if (:busy m) (line-at (:busy m) l) 0.0)
+        ;; tension drives drums that are playing; the gain keeps the line's
+        ;; ceiling, and busy may rise to certainty (see engine/mood.go)
+        driven (and (seq (:grooves m)) (pos? dg))
+        dhi (:hi (:drums m))]
     {:seed         seed
      :bpm          (+ (line-at (:bpm m) l) (double bpm-jitter) (* 30.0 t))
      :root         (+ (:root-base m) (* (:root-step m) level) root-off)
@@ -247,8 +254,8 @@
      :lead         (pick-lead seed (:leads m))
      ;; drums: moods without grooves send :none and a zero gain
      :groove       (if (:grooves m) (pick-groove seed (:grooves m)) :none)
-     :drum-gain    (if (:drums m) (line-at (:drums m) l) 0.0)
-     :drum-busy    (if (:busy m) (line-at (:busy m) l) 0.0)
+     :drum-gain    (if driven (let [v (+ dg (* 0.15 t))] (if dhi (min dhi v) v)) dg)
+     :drum-busy    (if driven (min 1.0 (+ db (* 0.4 t))) db)
      :swing        (get m :swing 0.0)
      :palette      (get m :palette)}))
 
