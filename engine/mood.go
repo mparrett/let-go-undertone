@@ -205,6 +205,7 @@ func (m *mood) derive(seed uint64, level int, tension float64) Params {
 		BellDensity: m.bell.at(l) * (1 - float64(0.5*t)),
 		AirGain:     m.air.at(l) + float64(0.1*t),
 		PulseGain:   t,
+		Grit:        t,
 		FifthOffset: tenseOffset(m.calm, t),
 		BellLift:    m.bellLift,
 		Palette:     m.palette,

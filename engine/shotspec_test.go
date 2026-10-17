@@ -110,7 +110,7 @@ func TestAcceptedShotsAreSafe(t *testing.T) {
 		}
 		return pick(usual)
 	}
-	accepted, swept := 0, 0
+	accepted, swept, gritty := 0, 0, 0
 	for i := 0; i < 3000; i++ {
 		// patch-shaped chains (env, source, mul, filters, out) with random
 		// parameters, so that some pass and the edges of each range are hit
@@ -129,6 +129,13 @@ func TestAcceptedShotsAreSafe(t *testing.T) {
 				if r.n(2) == 0 {
 					units = append(units, unit(op))
 				}
+			}
+			if r.n(2) == 0 {
+				// grit: drive and crush, at the edges of their ranges
+				d, c := unit("drive"), unit("crush")
+				d.Args = []float64{pick([]float64{0.05, 0.1, 1, 20, 21}), pick([]float64{-1.5, -1, 0, 0.3, 1})}
+				c.Args = []float64{pick([]float64{40, 50, 900, 22050, 44100, 50000}), pick([]float64{0, 1, 1.5, 8, 16, 17})}
+				units = append(units, d, c)
 			}
 			if r.n(2) == 0 {
 				// a resonant filter, swept by an lfo or an env half the time
@@ -157,7 +164,15 @@ func TestAcceptedShotsAreSafe(t *testing.T) {
 				break
 			}
 		}
-		syn := NewSynth(silentParams)
+		for _, u := range units {
+			if u.Op == "crush" {
+				gritty++
+				break
+			}
+		}
+		q := silentParams
+		q.Grit = float64(i % 2) // grit at both ends
+		syn := NewSynth(q)
 		syn.Trigger("fuzz", 20+r.n(90), 1, 0.5, 0, uint64(i))
 		for range 4 {
 			var l, rr float64
@@ -169,8 +184,8 @@ func TestAcceptedShotsAreSafe(t *testing.T) {
 			}
 		}
 	}
-	if accepted < 50 || swept < 10 {
-		t.Fatalf("only %d of 3000 random patches were accepted, %d with a swept filter; the test proves little", accepted, swept)
+	if accepted < 50 || swept < 10 || gritty < 10 {
+		t.Fatalf("only %d of 3000 random patches were accepted, %d with a swept filter, %d with drive and crush; the test proves little", accepted, swept, gritty)
 	}
-	t.Logf("%d random patches accepted and rendered, %d with a swept filter", accepted, swept)
+	t.Logf("%d random patches accepted and rendered, %d with a swept filter, %d with drive and crush", accepted, swept, gritty)
 }
