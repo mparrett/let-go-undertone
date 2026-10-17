@@ -425,7 +425,7 @@ func (s *Synth) resolveDegree(degree, octave int) int {
 // vocabulary lives above this seam, and a stale name must not crash a game.
 // gain scales the patch's own levels; pan is 0..1; delayMS offsets the start.
 func (s *Synth) Trigger(name string, note int, gain, pan, delayMS float64, seed uint64) bool {
-	d, ok := shotLib[name]
+	d, ok := lookupShot(name)
 	if !ok {
 		return false
 	}

@@ -4,8 +4,9 @@
 //
 // Importing the package registers the namespace (see init below), so an lg
 // runtime that links it needs no generated interop: lg code calls
-// audio/set-parameters, audio/music-start, audio/music-stop, audio/trigger
-// and audio/render-wav directly. The natives act on a default Music until a
+// audio/set-parameters, audio/music-start, audio/music-stop,
+// audio/set-music-gain, audio/trigger, audio/register-shot and
+// audio/render-wav directly. The natives act on a default Music until a
 // Go host points them elsewhere with SetMusic.
 //
 // Hosts with no filesystem (GOOS=js) load the lg sources through core's
@@ -309,6 +310,53 @@ type output interface {
 	Resume()
 }
 
+// shotSpec reads an lg shot map into a spec; RegisterShot judges the patch.
+func shotSpec(v vm.Value) (engine.ShotSpec, error) {
+	var s engine.ShotSpec
+	m, ok := v.(*vm.PersistentMap)
+	if !ok {
+		return s, fmt.Errorf("want a map, got %s", v.Type().Name())
+	}
+	if s.Name, ok = kwStr(m, "name"); !ok {
+		return s, fmt.Errorf("want :name as a keyword or string")
+	}
+	if !flt(m, "gate-ms", &s.GateMS) {
+		return s, fmt.Errorf("want :gate-ms as a number")
+	}
+	units, ok := at(m, "patch").(vm.ArrayVector)
+	if !ok {
+		return s, fmt.Errorf("want :patch as a vector of units")
+	}
+	for i, uv := range units {
+		u, ok := uv.(vm.ArrayVector)
+		if !ok || len(u) == 0 {
+			return s, fmt.Errorf("unit %d: want a vector such as [:out 0.5 0.5]", i)
+		}
+		var us engine.UnitSpec
+		if k, ok := u[0].(vm.Keyword); ok {
+			us.Op = string(k)
+		}
+		for j, x := range u[1:] {
+			switch x := x.(type) {
+			case vm.Float:
+				us.Args = append(us.Args, float64(x))
+			case vm.Int:
+				us.Args = append(us.Args, float64(x))
+			case vm.Keyword:
+				// an osc names its shape second: [:osc transpose :sine sweep decay]
+				if us.Op != "osc" || j != 1 {
+					return s, fmt.Errorf("unit %d: %s at %d; only an osc names a shape, second", i, x, j+1)
+				}
+				us.Shape = string(x)
+			default:
+				return s, fmt.Errorf("unit %d: %s is not a number or a shape", i, x.Type().Name())
+			}
+		}
+		s.Units = append(s.Units, us)
+	}
+	return s, nil
+}
+
 // lg map readers.
 // Absent keys leave the target untouched; that is the partial-merge contract.
 
@@ -415,6 +463,19 @@ func installAudioNS() {
 			return vm.NIL, fmt.Errorf("audio/set-music-gain: gain must be a number, got %s", a[0].Type().Name())
 		}
 		current.Load().setMusicGain(g)
+		return vm.NIL, nil
+	}))
+	// A game's own one-shot, in the shape engine.ShotSpec.EDN writes:
+	// {:name :ping :gate-ms 20 :patch [[:env 0.001 0.2 0 0.1] [:osc 0 :sine 0 1] [:mul] [:out 0.5 0.5]]}.
+	// Unlike a trigger it reports a bad patch, since one is a bug in the game.
+	ns.Def("register-shot", native("register-shot", 1, func(a []vm.Value) (vm.Value, error) {
+		s, err := shotSpec(a[0])
+		if err == nil {
+			err = engine.RegisterShot(s)
+		}
+		if err != nil {
+			return vm.NIL, fmt.Errorf("audio/register-shot: %w", err)
+		}
 		return vm.NIL, nil
 	}))
 	ns.Def("trigger", native("trigger", 1, func(a []vm.Value) (vm.Value, error) {
