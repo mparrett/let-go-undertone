@@ -349,17 +349,23 @@ func TestRatchetStrikesThreeTimesInItsSixteenth(t *testing.T) {
 	s.row = 0
 	s.stepDrums()
 	gains := []float64{s.dvoices[1].gain}
+	var at []int // frames after the hit's own frame
 	half := s.samplesPerRow / 2
-	for s.rowLeft = half; s.rowLeft > 0; s.rowLeft-- { // up to the off 16th
+	for f := 0; f <= half; f++ { // the hit's frame, then up to the off 16th
 		before := s.dvoices[1].gain
 		var l, r float64
 		s.runDrums(&l, &r)
 		if g := s.dvoices[1].gain; g != before {
 			gains = append(gains, g)
+			at = append(at, f)
 		}
 	}
 	if len(gains) != 3 || !(gains[0] > gains[1] && gains[1] > gains[2]) {
 		t.Fatalf("struck at gains %v, want three, falling", gains)
+	}
+	// evenly spaced: the re-strikes a third and two thirds of the way in
+	if gap := half / 3; at[0] != gap || at[1] != 2*gap {
+		t.Errorf("re-struck %v frames in, want %d and %d", at, gap, 2*gap)
 	}
 }
 

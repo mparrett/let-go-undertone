@@ -148,12 +148,12 @@ func drumLevel(c byte) float64 {
 
 // stepDrums plays the drums' on-row hits and arms the off 16ths.
 func (s *Synth) stepDrums() {
+	// the off 16th lands Swing of a row past halfway: 0 is straight, 1/6 a
+	// triplet shuffle
+	half := max(1, int(float64(s.samplesPerRow)*(0.5+s.params.Swing)))
 	for d := range s.dvoices {
 		v := &s.dvoices[d]
 		h := s.drums[d][s.row]
-		// the off 16th lands Swing of a row past halfway: 0 is straight,
-		// 1/6 a triplet shuffle
-		half := max(1, int(float64(s.samplesPerRow)*(0.5+s.params.Swing)))
 		s.rat[d] = ratchet{}
 		if h.on > 0 {
 			v.strike(s.sound(d), h.on, s.drumSeed(d))
@@ -191,7 +191,10 @@ func (r *ratchet) arm(n, span int, gain float64, seed uint64) {
 		return
 	}
 	gap := max(1, span/n)
-	*r = ratchet{left: gap, gap: gap, n: n - 1, gain: gain * 0.75, seed: seed}
+	// left counts one more than gap: every arm happens in a frame whose
+	// runDrums then ticks it, and a re-strike in the hit's own frame would
+	// cut the hit off
+	*r = ratchet{left: gap + 1, gap: gap, n: n - 1, gain: gain * 0.75, seed: seed}
 }
 
 // strike hits a drum lane afresh. trigger's legato path suits drones but not

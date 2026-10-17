@@ -348,7 +348,8 @@
       box.onchange = () => {
         if (box.checked) {
           spec.grooves = stashedGrooves || ["amble"];
-          if (spec.drums.base === 0 && spec.drums.step === 0) spec.drums.base = 0.55;
+          // a silent drum line is deliberate when tension brings the drums in
+          if (spec.drums.base === 0 && spec.drums.step === 0 && !(spec.tenseDrums > 0)) spec.drums.base = 0.55;
           if (spec.busy.base === 0 && spec.busy.step === 0) spec.busy.base = 0.3;
         } else { stashedGrooves = spec.grooves; spec.grooves = []; }
         sync(); changed();
