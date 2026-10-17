@@ -62,9 +62,12 @@ groove if it has one. The
 One-shots run beside the sequencer in an 8-voice pool that the sequencer never
 sees, so a trigger cannot change the music's random streams. Patches:
 `footstep`, `hit`, `thud`, `creak`, `cry`, `sink`, `lift`, `thunk`, `snap`,
-`twang`, `pluck`. Triggers take a gain, a pan, a sample-accurate delay, and
-either a MIDI note or a scale degree resolved against the current parameters,
-so a pickup chime lands in the music's key.
+`twang`, `pluck`, and for arcade games `blip`, `tink`, `zap`, `fall`. Triggers
+take a gain, a pan, a sample-accurate delay, and either a MIDI note or a scale
+degree resolved against the current parameters, so a pickup chime lands in the
+music's key. A repeat of the same shot at the same note within 30 ms is
+dropped, so a cascade of hits in one frame plays once; when the pool is full, a
+new shot takes the quietest voice.
 
 ### Determinism
 

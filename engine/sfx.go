@@ -298,6 +298,7 @@ var shotLib = map[string]shotDef{
 // shotReq is a staged trigger. delay is in samples, counted down in frame(),
 // so a two-note pickup arpeggio is sample-accurate rather than host-timed.
 type shotReq struct {
+	key   shotKey
 	patch Patch
 	note  int
 	gain  float64
@@ -308,6 +309,20 @@ type shotReq struct {
 }
 
 const nShots = 8
+
+// shotGapMS is how soon the same shot at the same note may start again. A
+// breakout cascade fires a dozen hits in one frame against nShots voices; the
+// repeats add nothing a listener can hear apart, and they would steal every
+// other sound in flight. Counted in audio time, when a shot starts, so a
+// burst that arrives in one Trigger batch is thinned as surely as one spread
+// over frames. A different note is a different sound: a plucked chord keeps
+// every note.
+const shotGapMS = 30
+
+type shotKey struct {
+	name string
+	note int
+}
 
 // maxPending bounds the queue of shots waiting to start.
 const maxPending = 32
@@ -321,6 +336,7 @@ type sfx struct {
 	shots   [nShots]Voice
 	pan     [nShots]float64
 	pos     int
+	started map[shotKey]int64 // frame each shot last started, for shotGapMS
 }
 
 // Shot is one trigger-map's worth of intent, as the sfx vocabulary expresses
@@ -394,6 +410,7 @@ func (s *Synth) Trigger(name string, note int, gain, pan, delayMS float64, seed 
 		pan = 1
 	}
 	req := shotReq{
+		key:   shotKey{name, note},
 		patch: humanize(d.patch, seed),
 		note:  note,
 		gain:  gain,
@@ -447,6 +464,13 @@ func (s *Synth) runShots(l, r *float64) {
 				keep = append(keep, q)
 				continue
 			}
+			if t, ok := fx.started[q.key]; ok && s.nframe-t < shotGapMS*SampleRate/1000 {
+				continue
+			}
+			if fx.started == nil {
+				fx.started = map[shotKey]int64{}
+			}
+			fx.started[q.key] = s.nframe
 			i := fx.voice()
 			fx.shots[i].trigger(q.patch, q.note, 0, q.gain, q.seed)
 			fx.shots[i].gateSamples = q.gate
