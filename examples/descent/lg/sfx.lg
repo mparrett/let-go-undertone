@@ -32,7 +32,7 @@
 
 (ns sfx
   (:require [music]
-            [ambience]))
+            [undertone.ambience :as ambience]))
 
 ;; ---- spatial model ----
 

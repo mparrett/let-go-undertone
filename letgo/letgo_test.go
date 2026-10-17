@@ -25,26 +25,29 @@ func TestNamespaceRegisteredAtImport(t *testing.T) {
 	}
 }
 
-// LoadEmbedded is the browser's whole load lane — GOOS=js has no filesystem,
-// so if this breaks, a wasm host dies at boot. Proving it natively keeps the
-// failure findable by `go test`.
-func TestLoadEmbeddedRunsTheWholeLane(t *testing.T) {
-	m := NewMusic(engine.DeriveDungeon(1, 0, 0))
-	SetMusic(m)
-	c, err := api.NewLetGo("embedtest")
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Deliberately no SetLoadPath: resolution must come from the embedded
-	// sources alone, exactly as in the browser.
-	if err := LoadEmbedded(c); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := c.Run("(ambience/score! 7 4 0.6)"); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := m.Params().BPM, engine.DeriveDungeon(7, 4, 0.6).BPM; got != want {
-		t.Errorf("bpm after embedded ambience/score! = %v, want %v", got, want)
+// The namespace resolves with no source path, as it must in the browser,
+// which has no filesystem, and in a cli.Main host: init registered it. Both
+// a plain require and LoadEmbedded reach it.
+func TestAmbienceResolvesWithNoSourcePath(t *testing.T) {
+	for _, load := range []func(*api.LetGo) error{
+		func(c *api.LetGo) error { _, err := c.Run("(require 'undertone.ambience)"); return err },
+		LoadEmbedded,
+	} {
+		m := NewMusic(engine.DeriveDungeon(1, 0, 0))
+		SetMusic(m)
+		c, err := api.NewLetGo("embedtest")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := load(c); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.Run("(undertone.ambience/score! 7 4 0.6)"); err != nil {
+			t.Fatal(err)
+		}
+		if got, want := m.Params().BPM, engine.DeriveDungeon(7, 4, 0.6).BPM; got != want {
+			t.Errorf("bpm after score! = %v, want %v", got, want)
+		}
 	}
 }
 

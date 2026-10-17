@@ -9,8 +9,9 @@
 // audio/render-wav directly. The natives act on a default Music until a
 // Go host points them elsewhere with SetMusic.
 //
-// Hosts with no filesystem (GOOS=js) load the lg sources through core's
-// load-string instead of the resolver's load path: see LoadEmbedded.
+// It also registers the embedded lg sources, so (require 'undertone.ambience)
+// resolves in any binary that links the package: a cli.Main host, a custom
+// lg, a browser build, with no source path.
 package letgo
 
 import (
@@ -18,6 +19,7 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -431,6 +433,11 @@ var current atomic.Pointer[Music]
 func init() {
 	current.Store(NewMusic(engine.DeriveDungeon(1, 0, 0)))
 	installAudioNS()
+	// The name is qualified because a registered namespace shadows a file
+	// of the same name on any source path (nooga/let-go#1064).
+	for _, s := range lg.Sources {
+		rt.RegisterEmbeddedSource(s.Name, s.Text)
+	}
 }
 
 // SetMusic points the audio namespace at m. A Go host that wants to own the
@@ -518,16 +525,14 @@ func native(name string, arity int, fn func([]vm.Value) (vm.Value, error)) vm.Va
 	return f
 }
 
-// LoadEmbedded loads the embedded lg sources (package lg, dependency order)
-// through core's load-string — the lane for hosts with no filesystem. Each
-// source is handed over as a Def'd var rather than spliced into the expression
-// string, so no escaping of the lg text is ever needed.
+// LoadEmbedded requires the embedded lg namespaces into c's current
+// namespace under their short names, so host code can call ambience/score!
+// as it could before the namespace was qualified. Since init registers
+// them, lg code needs only its own (:require [undertone.ambience ...]).
 func LoadEmbedded(c *api.LetGo) error {
 	for _, s := range lg.Sources {
-		if err := c.Def("undertone-embedded-src", s.Text); err != nil {
-			return fmt.Errorf("%s: %w", s.Name, err)
-		}
-		if _, err := c.Run("(load-string undertone-embedded-src)"); err != nil {
+		short := s.Name[strings.LastIndexByte(s.Name, '.')+1:]
+		if _, err := c.Run("(require '[" + s.Name + " :as " + short + "])"); err != nil {
 			return fmt.Errorf("%s: %w", s.Name, err)
 		}
 	}

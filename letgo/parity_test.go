@@ -24,8 +24,8 @@ func lgRuntime(t *testing.T) (*api.LetGo, *Music) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	c.SetLoadPath([]string{"lg"})
-	if _, err := c.Run("(require 'ambience)"); err != nil {
+	// no load path: init registered the namespace
+	if _, err := c.Run("(require '[undertone.ambience :as ambience])"); err != nil {
 		t.Fatal(err)
 	}
 	return c, m
