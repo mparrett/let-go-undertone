@@ -33,6 +33,8 @@ type ShotSpec struct {
 //	crush hold Hz, bits                               sample-hold and quantize the top
 //	send  amount                                      add the top to the delay bus
 //	verb  amount                                      add the top to the reverb bus
+//	scale gain, offset                                top = top*gain + offset
+//	pitch depth semis                                 pop m, bend every later osc by m*depth
 //	out   gain, pan 0..1                              pop and mix
 type UnitSpec struct {
 	Op    string
@@ -40,11 +42,11 @@ type UnitSpec struct {
 	Args  []float64
 }
 
-var opNames = []string{opEnv: "env", opOsc: "osc", opMul: "mul", opLpf: "lpf", opSend: "send", opOut: "out", opPluck: "pluck", opHpf: "hpf", opSvf: "svf", opLfo: "lfo", opDrive: "drive", opCrush: "crush", opVerb: "verb"}
+var opNames = []string{opEnv: "env", opOsc: "osc", opMul: "mul", opLpf: "lpf", opSend: "send", opOut: "out", opPluck: "pluck", opHpf: "hpf", opSvf: "svf", opLfo: "lfo", opDrive: "drive", opCrush: "crush", opVerb: "verb", opScale: "scale", opPitch: "pitch"}
 
 // opArgs is how many Args a unit of each op takes: the parameters its op
 // reads, less an osc's shape, which travels in UnitSpec.Shape.
-var opArgs = []int{opEnv: 4, opOsc: 3, opMul: 0, opLpf: 1, opSend: 1, opOut: 2, opPluck: 2, opHpf: 1, opSvf: 4, opLfo: 2, opDrive: 2, opCrush: 2, opVerb: 1}
+var opArgs = []int{opEnv: 4, opOsc: 3, opMul: 0, opLpf: 1, opSend: 1, opOut: 2, opPluck: 2, opHpf: 1, opSvf: 4, opLfo: 2, opDrive: 2, opCrush: 2, opVerb: 1, opScale: 2, opPitch: 1}
 
 var shapeNames = []string{shpSine: "sine", shpSaw: "saw", shpPulse: "pulse", shpNoise: "noise"}
 
@@ -131,6 +133,10 @@ func (s ShotSpec) patch() (Patch, error) {
 	}
 	p := make(Patch, len(s.Units))
 	depth, envs, outs := 0, 0, 0
+	// whether each stack slot carries signal (from an osc or pluck) or a
+	// control value (an env or lfo): an offset is DC on a signal, which the
+	// envelope does not shape and which clicks when the voice ends
+	var signal [9]bool
 	for i, us := range s.Units {
 		u, err := us.unit()
 		if err != nil {
@@ -141,7 +147,7 @@ func (s ShotSpec) patch() (Patch, error) {
 		switch u.op {
 		case opMul:
 			need = 2
-		case opOut, opLpf, opHpf, opSend, opDrive, opCrush, opVerb:
+		case opOut, opLpf, opHpf, opSend, opDrive, opCrush, opVerb, opScale, opPitch:
 			need = 1
 		case opSvf:
 			need = 1
@@ -152,10 +158,19 @@ func (s ShotSpec) patch() (Patch, error) {
 		if depth < need {
 			return nil, fmt.Errorf("unit %d (%s): the stack would run dry", i, us.Op)
 		}
+		if u.op == opScale && u.p[1] != 0 && signal[depth-1] {
+			return nil, fmt.Errorf("unit %d (scale): an offset on a signal is DC; scale an env or lfo, then mul it in", i)
+		}
 		switch u.op {
 		case opEnv, opOsc, opPluck, opLfo:
+			if depth < len(signal) {
+				signal[depth] = u.op == opOsc || u.op == opPluck
+			}
 			depth++
-		case opMul, opOut:
+		case opMul:
+			depth--
+			signal[depth-1] = signal[depth-1] || signal[depth]
+		case opOut, opPitch:
 			depth--
 		case opSvf:
 			depth -= need - 1
@@ -246,6 +261,14 @@ func (us UnitSpec) unit() (Unit, error) {
 	case opCrush:
 		ok = a[0] >= 50 && a[0] <= SampleRate && a[1] >= 1 && a[1] <= 16
 		rule = fmt.Sprintf("hold 50..%d Hz, bits 1..16", SampleRate)
+	case opScale:
+		// bounded so a scaled value stays near an envelope's range: an
+		// offset left on a signal is DC the mix would carry
+		ok = math.Abs(a[0]) <= 2 && math.Abs(a[1]) <= 2
+		rule = "gain and offset within 2"
+	case opPitch:
+		ok = math.Abs(a[0]) <= 12
+		rule = "depth within 12 semitones"
 	case opSend, opVerb:
 		ok = a[0] >= 0 && a[0] <= 1
 		rule = "an amount 0..1"

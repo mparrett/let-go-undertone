@@ -36,6 +36,8 @@ const (
 	opDrive        // p: drive, bias -1..1; pop x -> push tanh(drive*x + bias) - tanh(bias)
 	opCrush        // p: hold Hz, bits; pop x -> push x held and quantized
 	opVerb         // p: amount; peek top, add top*amount to the reverb bus
+	opScale        // p: gain, offset; top = top*gain + offset
+	opPitch        // p: depth semis; pop m, bend every later osc by m*depth
 )
 
 const (
@@ -59,9 +61,9 @@ type ustate struct {
 	stage                 int     // env: 0 attack, 1 decay, 2 sustain, 3 release
 	rng                   uint64
 	ks                    []float64 // Karplus-Strong delay line, allocated on first sample
-	kpos                  int       // pluck: read position; swept svf: control-rate counter
+	kpos                  int       // pluck: read position; swept svf and bent osc: control-rate counter
 	k                     float64   // cached per-note coefficient: osc phase increment (no sweep) or lpf c
-	g, g1, g2             float64   // svf, drive, crush: constants derived from grit g
+	g, g1, g2             float64   // svf, drive, crush: constants derived from grit g; osc: g1 is its bend ratio
 	gset                  bool      // g1 and g2 hold for grit g
 	ko                    float64   // svf: the open its coefficient k was computed at
 	kset                  bool
@@ -174,6 +176,7 @@ func (v *Voice) run(l, r *float64, b *sends) {
 	var stack [8]float64
 	sp := 0
 	alive := false
+	bend := 0.0 // semitones from the last pitch unit, for the oscs after it
 	for i := range v.patch {
 		u := &v.patch[i]
 		s := &v.units[i]
@@ -216,6 +219,15 @@ func (v *Voice) run(l, r *float64, b *sends) {
 				semis := float64(v.note) + u.p[0] + u.p[2]*s.sweep
 				s.sweep -= s.sweep / (u.p[3]*SampleRate + 1)
 				inc = 440 * math.Pow(2, (semis-69)/12) / SampleRate
+			}
+			if bend != 0 {
+				// exp2 every 16th sample, as a swept svf does: vibrato
+				// and drift are slow enough not to step audibly
+				if s.kpos == 0 {
+					s.g1 = math.Exp2(bend / 12)
+				}
+				s.kpos = (s.kpos + 1) & 15
+				inc *= s.g1
 			}
 			s.phase += inc
 			s.phase -= math.Floor(s.phase)
@@ -350,6 +362,15 @@ func (v *Voice) run(l, r *float64, b *sends) {
 				s.lp = math.Round(stack[sp-1]*s.g2) / s.g2
 			}
 			stack[sp-1] = s.lp
+		case opScale:
+			// an lfo's -1..1 made into a range: gain 0.3, offset 0.7 swings
+			// 0.4..1, a tremolo once multiplied into a signal
+			stack[sp-1] = stack[sp-1]*u.p[0] + u.p[1]
+		case opPitch:
+			// clamped: chained scales can grow a modulator past what
+			// validation sees, and exp2 of a huge bend would overflow
+			sp--
+			bend = max(-24, min(stack[sp]*u.p[0], 24))
 		case opPluck:
 			// Karplus-Strong: a noise burst circulating in a delay line
 			// the length of the period, averaged (lowpassed) each pass.
