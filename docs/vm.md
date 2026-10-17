@@ -50,7 +50,7 @@ pitch vibrato, no level tremolo, no pulse width. Generalizing the svf's
 modulation input to other ops is the next step if a patch needs it.
 
 **Resonance stops short of self-oscillation.** The `svf` tops out at a Q of
-10, so a voice always dies with its envelope; a filter that sings on its own
+5, so a voice always dies with its envelope; a filter that sings on its own
 would need a voice that outlives its env.
 
 **Distortion only happens on the mix.** The final `tanh` is a safety limiter. No

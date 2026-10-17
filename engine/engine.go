@@ -104,7 +104,17 @@ func (v *Voice) trigger(patch Patch, note, gateRows int, gain float64, seed uint
 		}
 		u.sweep = 1
 		u.rng = seed*2862933555777941757 + uint64(i) + 3037000493
+		// a sample-and-hold lfo's first value; legato keeps the held one
+		if !legato && patch[i].op == opLfo {
+			u.lp = u.noise()
+		}
 	}
+}
+
+// noise steps the unit's LCG and returns a sample in -1..1.
+func (s *ustate) noise() float64 {
+	s.rng = s.rng*6364136223846793005 + 1442695040888963407
+	return float64(int64(s.rng>>11))/(1<<52) - 1
 }
 
 // level is the voice's loudest envelope times its gain: how much it would
@@ -188,8 +198,7 @@ func (v *Voice) run(l, r, delay *float64) {
 					x = -1
 				}
 			case shpNoise:
-				s.rng = s.rng*6364136223846793005 + 1442695040888963407
-				x = float64(int64(s.rng>>11))/(1<<52) - 1
+				x = s.noise()
 			}
 			stack[sp] = x
 			sp++
@@ -234,9 +243,10 @@ func (v *Voice) run(l, r, delay *float64) {
 				s.k = math.Tan(math.Pi * min(fc, 0.45*SampleRate) / SampleRate)
 				s.kset = true
 			}
-			// resonance 1 leaves k at 0.1, a Q of 10: it rings and whistles
-			// but never self-oscillates, so a voice still dies with its env
-			g, k := s.k, 2-1.9*u.p[1]
+			// resonance 1 leaves k at 0.2, a Q of 5: it rings and whistles
+			// but never self-oscillates, so a voice still dies with its env,
+			// and the lowpass peak at the cutoff stays within 14 dB
+			g, k := s.k, 2-1.8*u.p[1]
 			a1 := 1 / (1 + g*(g+k))
 			a2 := g * a1
 			x := stack[sp-1]
@@ -248,16 +258,13 @@ func (v *Voice) run(l, r, delay *float64) {
 			case 0:
 				stack[sp-1] = v2
 			case 1:
-				stack[sp-1] = v1
+				// scaled by k for unity gain at the cutoff, whatever
+				// the resonance: narrower, not louder
+				stack[sp-1] = k * v1
 			default:
 				stack[sp-1] = x - k*v1 - v2
 			}
 		case opLfo:
-			if !s.kset { // a new note: the first held value
-				s.rng = s.rng*6364136223846793005 + 1442695040888963407
-				s.lp = float64(int64(s.rng>>11))/(1<<52) - 1
-				s.kset = true
-			}
 			var x float64
 			switch int(u.p[1]) {
 			case 0:
@@ -270,8 +277,7 @@ func (v *Voice) run(l, r, delay *float64) {
 			s.phase += u.p[0] / SampleRate
 			if s.phase >= 1 {
 				s.phase -= 1
-				s.rng = s.rng*6364136223846793005 + 1442695040888963407
-				s.lp = float64(int64(s.rng>>11))/(1<<52) - 1
+				s.lp = s.noise()
 			}
 			stack[sp] = x
 			sp++
@@ -291,8 +297,7 @@ func (v *Voice) run(l, r, delay *float64) {
 					s.ks = make([]float64, n)
 				}
 				for i := range s.ks {
-					s.rng = s.rng*6364136223846793005 + 1442695040888963407
-					s.ks[i] = float64(int64(s.rng>>11))/(1<<52) - 1
+					s.ks[i] = s.noise()
 				}
 			}
 			x := s.ks[s.kpos]

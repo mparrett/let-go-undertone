@@ -86,3 +86,36 @@ func TestLfoSampleAndHoldSteps(t *testing.T) {
 		t.Errorf("%d steps in five cycles", steps)
 	}
 }
+
+// The bandpass passes a tone at its cutoff at unity gain whatever the
+// resonance: more resonance narrows the band without making it louder.
+func TestSvfBandpassIsUnityAtTheCutoff(t *testing.T) {
+	for _, res := range []float64{0, 0.5, 1} {
+		p := Patch{held, {opOsc, [4]float64{0, shpSine, 0, 1}}, {opMul, [4]float64{}},
+			{opSvf, [4]float64{440, res, 1, 0}}, {opOut, [4]float64{1, 0}}}
+		if g := rmsOf(play(p, 69, SampleRate/2)[SampleRate/4:]) / math.Sqrt(0.5); math.Abs(g-1) > 0.05 {
+			t.Errorf("resonance %v: gain %0.2f at the cutoff, want 1", res, g)
+		}
+	}
+}
+
+// A legato retrigger keeps a sample-and-hold lfo's held value, as it keeps
+// the phase: the step lands at the cycle's edge, not at the new note.
+func TestLegatoKeepsTheHeldValue(t *testing.T) {
+	p := Patch{held, {opLfo, [4]float64{2, 2}}, {opMul, [4]float64{}}, {opOut, [4]float64{1, 0}}}
+	var v Voice
+	v.trigger(p, 60, 1<<20, 1, 1)
+	sample := func() float64 {
+		var l, r, d float64
+		v.run(&l, &r, &d)
+		return l
+	}
+	for range SampleRate / 8 { // a quarter of the way into a cycle
+		sample()
+	}
+	before := sample()
+	v.trigger(p, 62, 1<<20, 1, 2)
+	if after := sample(); after != before {
+		t.Errorf("held %v, then %v after a legato retrigger", before, after)
+	}
+}
