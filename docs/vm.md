@@ -24,8 +24,8 @@ floats, in the style of sointu and 4klang.
 | `crush` | hold Hz, bits | sample-hold the top and round it to the bit depth |
 | `send` | amount | add the top to the delay bus |
 | `verb` | amount | add the top to the reverb bus |
-| `scale` | gain, offset | top = top·gain + offset: an `lfo` made into a range |
-| `pitch` | depth semis | pop m; bend every later `osc` by m·depth semitones |
+| `scale` | gain, offset | top = top·gain + offset: an `lfo` made into a range; an offset only on an env or lfo, never on signal (it would be DC) |
+| `pitch` | depth semis | pop m; bend every later `osc` by m·depth semitones, at most two octaves |
 | `out` | gain, pan | pop and mix |
 
 In a `ShotSpec`, an `osc` names its shape in `Shape`, and `Args` holds the

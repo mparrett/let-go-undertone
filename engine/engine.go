@@ -61,9 +61,9 @@ type ustate struct {
 	stage                 int     // env: 0 attack, 1 decay, 2 sustain, 3 release
 	rng                   uint64
 	ks                    []float64 // Karplus-Strong delay line, allocated on first sample
-	kpos                  int       // pluck: read position; swept svf: control-rate counter
+	kpos                  int       // pluck: read position; swept svf and bent osc: control-rate counter
 	k                     float64   // cached per-note coefficient: osc phase increment (no sweep) or lpf c
-	g, g1, g2             float64   // svf, drive, crush: constants derived from grit g
+	g, g1, g2             float64   // svf, drive, crush: constants derived from grit g; osc: g1 is its bend ratio
 	gset                  bool      // g1 and g2 hold for grit g
 	kset                  bool
 }
@@ -358,8 +358,10 @@ func (v *Voice) run(l, r *float64, b *sends) {
 			// 0.4..1, a tremolo once multiplied into a signal
 			stack[sp-1] = stack[sp-1]*u.p[0] + u.p[1]
 		case opPitch:
+			// clamped: chained scales can grow a modulator past what
+			// validation sees, and exp2 of a huge bend would overflow
 			sp--
-			bend = stack[sp] * u.p[0]
+			bend = max(-24, min(stack[sp]*u.p[0], 24))
 		case opPluck:
 			// Karplus-Strong: a noise burst circulating in a delay line
 			// the length of the period, averaged (lowpassed) each pass.

@@ -72,6 +72,7 @@ func TestRegisterShotRefusesUnsafePatches(t *testing.T) {
 		{"nine on the stack", ShotSpec{Name: "x", GateMS: 10, Units: nine}, "overflow"},
 		{"no out", ShotSpec{Name: "x", GateMS: 10, Units: []UnitSpec{env}}, "out"},
 		{"a gate that never closes", ShotSpec{Name: "x", GateMS: 0, Units: ok}, "gate"},
+		{"DC on the signal", ShotSpec{Name: "x", GateMS: 10, Units: []UnitSpec{env, osc, mul, {Op: "scale", Args: []float64{1, 0.7}}, out}}, "DC"},
 		{"a release of hours", ShotSpec{Name: "x", GateMS: 10, Units: with(0, UnitSpec{Op: "env", Args: []float64{0, 0.1, 0, 3600}})}, "release"},
 	} {
 		err := RegisterShot(c.spec)
@@ -111,7 +112,7 @@ func TestAcceptedShotsAreSafe(t *testing.T) {
 		return pick(usual)
 	}
 	accepted, swept, gritty, bent := 0, 0, 0, 0
-	for i := 0; i < 6000; i++ {
+	for i := 0; i < 10000; i++ {
 		// patch-shaped chains (env, source, mul, filters, out) with random
 		// parameters, so that some pass and the edges of each range are hit
 		unit := func(op string) UnitSpec {
@@ -132,10 +133,17 @@ func TestAcceptedShotsAreSafe(t *testing.T) {
 				units = append(units, l, pt)
 			}
 			units = append(units, unit("env"), unit([]string{"osc", "pluck"}[r.n(2)]), unit("mul"))
-			for _, op := range []string{"lpf", "hpf", "send", "verb", "scale"} {
+			for _, op := range []string{"lpf", "hpf", "send", "verb"} {
 				if r.n(2) == 0 {
 					units = append(units, unit(op))
 				}
+			}
+			if r.n(3) == 0 {
+				// tremolo: an lfo scaled into a range and multiplied in
+				l, sc := unit("lfo"), unit("scale")
+				l.Args[1] = float64(r.n(3))
+				sc.Args = []float64{pick([]float64{-3, -2, 0.3, 1, 2}), pick([]float64{-2, 0, 0.7, 2, 3})}
+				units = append(units, l, sc, unit("mul"))
 			}
 			if r.n(2) == 0 {
 				// grit: drive and crush, at the edges of their ranges
@@ -202,7 +210,7 @@ func TestAcceptedShotsAreSafe(t *testing.T) {
 		}
 	}
 	if accepted < 50 || swept < 10 || gritty < 10 || bent < 10 {
-		t.Fatalf("only %d of 6000 random patches were accepted, %d with a swept filter, %d with drive and crush, %d bent; the test proves little", accepted, swept, gritty, bent)
+		t.Fatalf("only %d of 10000 random patches were accepted, %d with a swept filter, %d with drive and crush, %d bent; the test proves little", accepted, swept, gritty, bent)
 	}
 	t.Logf("%d random patches accepted and rendered, %d with a swept filter, %d with drive and crush, %d bent", accepted, swept, gritty, bent)
 }

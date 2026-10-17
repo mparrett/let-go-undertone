@@ -133,6 +133,10 @@ func (s ShotSpec) patch() (Patch, error) {
 	}
 	p := make(Patch, len(s.Units))
 	depth, envs, outs := 0, 0, 0
+	// whether each stack slot carries signal (from an osc or pluck) or a
+	// control value (an env or lfo): an offset is DC on a signal, which the
+	// envelope does not shape and which clicks when the voice ends
+	var signal [9]bool
 	for i, us := range s.Units {
 		u, err := us.unit()
 		if err != nil {
@@ -154,10 +158,19 @@ func (s ShotSpec) patch() (Patch, error) {
 		if depth < need {
 			return nil, fmt.Errorf("unit %d (%s): the stack would run dry", i, us.Op)
 		}
+		if u.op == opScale && u.p[1] != 0 && signal[depth-1] {
+			return nil, fmt.Errorf("unit %d (scale): an offset on a signal is DC; scale an env or lfo, then mul it in", i)
+		}
 		switch u.op {
 		case opEnv, opOsc, opPluck, opLfo:
+			if depth < len(signal) {
+				signal[depth] = u.op == opOsc || u.op == opPluck
+			}
 			depth++
-		case opMul, opOut, opPitch:
+		case opMul:
+			depth--
+			signal[depth-1] = signal[depth-1] || signal[depth]
+		case opOut, opPitch:
 			depth--
 		case opSvf:
 			depth -= need - 1

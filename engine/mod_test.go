@@ -69,3 +69,26 @@ func TestScaleMakesTremolo(t *testing.T) {
 		t.Errorf("level swings %.2f..%.2f (ratio %.2f); want about 0.4", lo, hi, r)
 	}
 }
+
+// A modulator grown past any one unit's bounds by chained scales still
+// bends a finite amount: the bend is clamped, so the patch stays finite.
+func TestChainedScalesCannotOverflowTheBend(t *testing.T) {
+	units := []UnitSpec{{Op: "env", Args: []float64{0.001, 0.1, 1, 0.05}}, {Op: "lfo", Args: []float64{1, 0}}}
+	for range 10 {
+		units = append(units, UnitSpec{Op: "scale", Args: []float64{2, 2}})
+	}
+	units = append(units, UnitSpec{Op: "pitch", Args: []float64{12}},
+		UnitSpec{Op: "osc", Shape: "sine", Args: []float64{0, 0, 1}}, UnitSpec{Op: "mul"}, UnitSpec{Op: "out", Args: []float64{0.5, 0.5}})
+	if err := RegisterShot(ShotSpec{Name: "overbent", GateMS: 100, Units: units}); err != nil {
+		t.Fatalf("the patch the test needs was refused: %v", err)
+	}
+	s := NewSynth(silentParams)
+	s.Trigger("overbent", 60, 1, 0.5, 0, 1)
+	for range SampleRate / 10 {
+		var l, r float64
+		s.runShots(&l, &r)
+		if math.IsNaN(l) || math.IsInf(l, 0) {
+			t.Fatalf("rendered %v", l)
+		}
+	}
+}
