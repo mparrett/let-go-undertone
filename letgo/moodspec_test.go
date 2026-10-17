@@ -2,6 +2,7 @@ package letgo
 
 import (
 	"fmt"
+	"reflect"
 	"testing"
 
 	"github.com/mparrett/undertone/engine"
@@ -52,5 +53,24 @@ func TestDeriveSpecMatchesMoodSpec(t *testing.T) {
 				checkParams(t, name, m.params, want)
 			}
 		}
+	}
+}
+
+// A palette the host lacks is an error, as it is for MoodSpec.Derive, and
+// leaves the current patches alone; an export with none still reads back.
+func TestSpecPaletteMustExist(t *testing.T) {
+	c, m := lgRuntime(t)
+	m.params = engine.DeriveDungeon(1, 0, 0)
+	before := m.params.Palette
+	if _, err := c.Run("(audio/set-parameters {:palette :auroa :bpm 61})"); err == nil {
+		t.Error("an unknown :palette was accepted")
+	}
+	if m.params.BPM == 61 || !reflect.DeepEqual(m.params.Palette, before) {
+		t.Error("a rejected map still changed the music")
+	}
+	s, _ := engine.MoodByName("village")
+	s.Palette = ""
+	if _, err := c.Run("(get {" + s.EDN() + "} :village)"); err != nil {
+		t.Errorf("an export without a palette does not read: %v\n%s", err, s.EDN())
 	}
 }

@@ -193,7 +193,11 @@ func (s MoodSpec) EDN() string {
 	}{{"drone", s.Drone}, {"fifth", s.Fifth}, {"pad", s.Pad}, {"bell", s.Bell}, {"air", s.Air}} {
 		fmt.Fprintf(&b, " :%-9s %s\n", f.k, ln(f.l))
 	}
-	fmt.Fprintf(&b, " :calm      %d\n :bell-lift %d\n :palette   :%s\n :leads     %s", s.Calm, s.BellLift, s.Palette, kws(s.Leads))
+	fmt.Fprintf(&b, " :calm      %d\n :bell-lift %d\n", s.Calm, s.BellLift)
+	if s.Palette != "" { // a bare ":" would not read back
+		fmt.Fprintf(&b, " :palette   :%s\n", s.Palette)
+	}
+	fmt.Fprintf(&b, " :leads     %s", kws(s.Leads))
 	if len(s.Grooves) > 0 {
 		fmt.Fprintf(&b, "\n :grooves   %s\n :drums     %s\n :busy      %s\n :swing     %s",
 			kws(s.Grooves), ln(s.Drums), ln(s.Busy), num(s.Swing))

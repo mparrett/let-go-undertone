@@ -63,10 +63,21 @@ func (m *Music) Params() engine.Params {
 // setParameters merges a partial lg map over current state and stages it.
 // Unknown keys are ignored (forward compatibility) and absent keys keep their
 // current value, so live-coding is just calling it again with what changed.
-func (m *Music) setParameters(v vm.Value) vm.Value {
+// An unknown :palette is the exception: it comes from an exported mood, which
+// MoodSpec.Derive rejects for the same name, so it is an error here too rather
+// than a mood playing on whatever patches were loaded before.
+func (m *Music) setParameters(v vm.Value) (vm.Value, error) {
 	lgm, ok := v.(*vm.PersistentMap)
 	if !ok {
-		return vm.NIL
+		return vm.NIL, nil
+	}
+	var pal *engine.Palette
+	if s, ok := kwStr(lgm, "palette"); ok {
+		p, ok := engine.PaletteByName(s)
+		if !ok {
+			return vm.NIL, fmt.Errorf("audio/set-parameters: unknown palette %q", s)
+		}
+		pal = &p
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -85,11 +96,9 @@ func (m *Music) setParameters(v vm.Value) vm.Value {
 	// :palette names a bank directly, for a mood the host has no row for. The
 	// bank's own bell is replaced by the current lead, since a partial map
 	// need not carry :lead.
-	if s, ok := kwStr(lgm, "palette"); ok {
-		if pal, ok := engine.PaletteByName(s); ok {
-			m.params.Palette = pal
-			engine.ApplyLead(&m.params, m.params.LeadName)
-		}
+	if pal != nil {
+		m.params.Palette = *pal
+		engine.ApplyLead(&m.params, m.params.LeadName)
 	}
 	flt(lgm, "bpm", &m.params.BPM)
 	integer(lgm, "root", &m.params.Root)
@@ -125,7 +134,7 @@ func (m *Music) setParameters(v vm.Value) vm.Value {
 	if m.synth != nil {
 		m.synth.SetParameters(m.params)
 	}
-	return vm.NIL
+	return vm.NIL, nil
 }
 
 // trigger accepts one trigger map or a vector of them (the shape
@@ -387,7 +396,7 @@ func CurrentMusic() *Music { return current.Load() }
 func installAudioNS() {
 	ns := vm.NewNamespace("audio")
 	ns.Def("set-parameters", native("set-parameters", 1, func(a []vm.Value) (vm.Value, error) {
-		return current.Load().setParameters(a[0]), nil
+		return current.Load().setParameters(a[0])
 	}))
 	ns.Def("music-start", native("music-start", 0, func([]vm.Value) (vm.Value, error) {
 		return current.Load().Start(), nil
